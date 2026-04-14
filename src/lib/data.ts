@@ -1,12 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
-import { adminDb } from "./firebase/admin";
+import { adminAuth, adminDb } from "./firebase/admin";
+
 
 import type {
   Alert,
   AuthenticatedUser,
   SystemSettings,
   CreateAlertRequestBody,
+  CreateUserRequestBody,
+  DashboardUser,
+  UpdateUserRequestBody,
+  Device,
+  DeviceStatus,
 } from "@/lib/types";
 
 const DEFAULT_SYSTEM_SETTINGS: Omit<SystemSettings, "updated_at" | "updated_by"> = {
@@ -48,6 +54,22 @@ function serializeTimestamp(value: unknown) {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "string") return value;
   return null;
+}
+
+function mapUserDoc(id: string, rawInput: unknown): DashboardUser {
+  const raw = ensureRecord(rawInput);
+  return {
+    uid: id,
+    name: typeof raw.name === "string" ? raw.name : "Unknown User",
+    email: typeof raw.email === "string" ? raw.email : "",
+    role: typeof raw.role === "string" ? raw.role : "viewer",
+    status: typeof raw.status === "string" ? raw.status : "inactive",
+    telegram_chat_id:
+      typeof raw.telegram_chat_id === "string" ? raw.telegram_chat_id : null,
+    created_at: serializeTimestamp(raw.created_at),
+    updated_at: serializeTimestamp(raw.updated_at),
+    last_login_at: serializeTimestamp(raw.last_login_at),
+  };
 }
 
 function mapSystemSettings(rawInput: unknown): SystemSettings {
@@ -337,4 +359,92 @@ export async function sendTelegramAlert(
     channel: "telegram",
     status: "sent",
   };
+}
+
+export async function getUsers(filters: { role?: string | null; status?: string | null }) {
+  let query: FirebaseFirestore.Query = adminDb.collection("users");
+  if (filters.role) query = query.where("role", "==", filters.role);
+  if (filters.status) query = query.where("status", "==", filters.status);
+
+  const snapshot = await query.orderBy("created_at", "desc").get();
+  return snapshot.docs.map((doc) => mapUserDoc(doc.id, doc.data()));
+}
+
+export async function createUser(
+  payload: CreateUserRequestBody,
+  actor: AuthenticatedUser,
+) {
+  const userRecord = await adminAuth.createUser({
+    email: payload.email,
+    password: payload.password,
+    displayName: payload.name,
+    disabled: payload.status !== "active",
+  });
+
+  await adminDb.collection("users").doc(userRecord.uid).set({
+    uid: userRecord.uid,
+    name: payload.name,
+    email: payload.email,
+    role: payload.role,
+    status: payload.status,
+    telegram_chat_id: payload.telegram_chat_id ?? null,
+    created_at: timestampNow(),
+    updated_at: timestampNow(),
+    last_login_at: null,
+  });
+
+  await writeAuditLog(actor, "create_user", "user", userRecord.uid, {
+    role: payload.role,
+    status: payload.status,
+  });
+
+  return getUserById(userRecord.uid);
+}
+
+export async function updateUser(
+  uid: string,
+  payload: UpdateUserRequestBody,
+  actor: AuthenticatedUser,
+) {
+  const updateAuthPayload: Record<string, unknown> = {};
+  if (payload.name) updateAuthPayload.displayName = payload.name;
+  if (payload.email) updateAuthPayload.email = payload.email;
+  if (payload.status) updateAuthPayload.disabled = payload.status !== "active";
+  if (Object.keys(updateAuthPayload).length > 0) {
+    await adminAuth.updateUser(uid, updateAuthPayload);
+  }
+
+  await adminDb.collection("users").doc(uid).set(
+    {
+      ...payload,
+      updated_at: timestampNow(),
+    },
+    { merge: true },
+  );
+
+  await writeAuditLog(actor, "update_user", "user", uid, payload as Record<string, unknown>);
+  return getUserById(uid);
+}
+
+export async function deactivateUser(uid: string, actor: AuthenticatedUser) {
+  await adminAuth.updateUser(uid, { disabled: true });
+  await adminDb.collection("users").doc(uid).set(
+    {
+      status: "inactive",
+      updated_at: timestampNow(),
+    },
+    { merge: true },
+  );
+
+  await writeAuditLog(actor, "delete_user", "user", uid, {});
+}
+
+export async function touchUserLastLogin(uid: string) {
+  await adminDb.collection("users").doc(uid).set(
+    {
+      last_login_at: timestampNow(),
+      updated_at: timestampNow(),
+    },
+    { merge: true },
+  );
 }

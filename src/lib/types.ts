@@ -17,6 +17,7 @@ export type ApiErrorResponse = {
 
 export type UserRole = "admin" | "member" | "viewer" | string;
 export type UserStatus = "active" | "inactive" | string;
+export type SafeStatus = "safe" | "warning" | "danger" | string;
 
 export type AlertSeverity = "info" | "warning" | "critical" | string;
 export type AlertStatus =
@@ -90,6 +91,7 @@ export type CreateUserProfilePayload = {
   role?: string;
   status?: string;
 };
+
 
 export type SendTelegramRequestBody = {
   recipient_chat_id: string;
@@ -168,3 +170,72 @@ export type Alert = {
 export type ResolveAlertRequestBody = {
   resolution_note?: string;
 };
+
+export type SensorReading = {
+  reading_id: string;
+  device_id: string;
+  temperature_c: number;
+  humidity_pct: number;
+  gas_ppm: number;
+  smoke_pct: number | null;
+  flame_detected: boolean;
+  buzzer_active: boolean | null;
+  safe_status: SafeStatus;
+  source: string;
+  recorded_at: string | null;
+};
+
+export type CreateReadingRequestBody = {
+  temperature_c: number;
+  humidity_pct: number;
+  gas_ppm: number;
+  smoke_pct?: number | null;
+  flame_detected: boolean;
+  buzzer_active?: boolean | null;
+  source: string;
+  recorded_at?: string;
+};
+
+export type DeviceStatusLog = {
+  log_id: string;
+  device_id: string;
+  previous_status: string | null;
+  new_status: string;
+  reason: string;
+  created_at: string | null;
+};
+
+export type CreateDeviceRequestBody = {
+  device_id: string;
+  name: string;
+  location: string;
+  room?: string | null;
+  firmware_version?: string | null;
+  wifi_ssid?: string | null;
+  gas_sensor_enabled: boolean;
+  flame_sensor_enabled: boolean;
+  temp_sensor_enabled: boolean;
+  humidity_sensor_enabled: boolean;
+  local_alarm_enabled: boolean;
+  is_active: boolean;
+};
+
+export type UpdateDeviceRequestBody = Partial<
+  Pick<
+    Device,
+    | "name"
+    | "location"
+    | "room"
+    | "firmware_version"
+    | "ip_address"
+    | "wifi_ssid"
+    | "is_active"
+    | "gas_sensor_enabled"
+    | "flame_sensor_enabled"
+    | "temp_sensor_enabled"
+    | "humidity_sensor_enabled"
+    | "local_alarm_enabled"
+    | "battery_level"
+    | "maintenance_due_at"
+  >
+>;

@@ -239,3 +239,10 @@ export type UpdateDeviceRequestBody = Partial<
     | "maintenance_due_at"
   >
 >;
+export type ChartPoint = {
+  time: string;
+  temperature_c: number | null;
+  humidity_pct: number | null;
+  gas_ppm: number | null;
+  smoke_pct: number | null;
+};

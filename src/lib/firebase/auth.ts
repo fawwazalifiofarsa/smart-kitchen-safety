@@ -8,7 +8,6 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { firebaseClientDb } from "@/lib/firebase/client";
 
-
 export const SESSION_COOKIE_NAME = "smart-kitchen-session";
 export const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 5;
 export const SESSION_DURATION_SECONDS = SESSION_DURATION_MS / 1000;
@@ -242,7 +241,9 @@ export async function getUserFromSessionCookie(sessionCookie: string) {
   }
 }
 
-export async function getUserFromAccessToken(idToken: string) {
+export async function getUserFromAccessToken(
+  idToken: string,
+): Promise<AuthenticatedUser | null> {
   const decoded = await adminAuth.verifyIdToken(idToken);
   const uid = decoded.uid;
 
@@ -255,7 +256,12 @@ export async function getUserFromAccessToken(idToken: string) {
 
   return {
     uid,
-    ...data,
+    name: typeof data.name === "string" ? data.name : (decoded.name ?? ""),
+    email: typeof data.email === "string" ? data.email : (decoded.email ?? ""),
+    role: typeof data.role === "string" ? data.role : "viewer",
+    status: typeof data.status === "string" ? data.status : "inactive",
+    telegram_chat_id:
+      typeof data.telegram_chat_id === "string" ? data.telegram_chat_id : null,
   };
 }
 

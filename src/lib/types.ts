@@ -49,7 +49,7 @@ export type RegisterRequestBody = {
 export type LoginResponseData = {
   access_token: string;
   refresh_token: string;
-  user: string;
+  user: Pick<DashboardUser, "uid" | "name" | "email" | "role" | "status">;
 };
 
 export type CreateUserRequestBody = {

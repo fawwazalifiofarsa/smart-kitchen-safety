@@ -6,7 +6,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { LoginRequestBody } from "@/lib/types";
+import type { LoginRequestBody, LoginResponseData } from "@/lib/types";
+import { fetchJson } from "@/lib/use-api-data";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,9 +18,24 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function handleSubmit() {
-    router.replace("/dashboard");
-    router.refresh();
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+
+    try {
+      await fetchJson<LoginResponseData>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
+
+      router.replace("/dashboard");
+      router.refresh();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Login gagal");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -50,15 +66,12 @@ export default function LoginPage() {
               Sign in
             </h2>
             <p className="text-sm text-[var(--color-muted)]">
-              Gunakan akun yang sudah terdaftar di
+              Gunakan akun Firebase Authentication yang sudah terdaftar di
               dashboard.
             </p>
           </div>
 
-          <form className="mt-8 space-y-5" onSubmit={(e) => {
-            e.preventDefault();
-            handleSubmit();
-          }}>
+          <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label
                 className="text-sm font-medium text-[var(--color-foreground)]"

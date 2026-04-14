@@ -26,7 +26,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  async function handleLogout() {}
+  async function handleLogout() {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+
+    router.replace("/login");
+    router.refresh();
+  }
 
   return (
     <div className="min-h-screen bg-background">

@@ -24,3 +24,11 @@ export function requiredString(
 
   return value.trim();
 }
+
+export function optionalString(value: unknown) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}

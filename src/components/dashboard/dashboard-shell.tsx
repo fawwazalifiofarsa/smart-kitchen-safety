@@ -5,7 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import type { AuthenticatedUser } from "@/lib/types";
 import { cn } from "@/lib/utils/format";
+import { useApiData } from "@/lib/use-api-data";
 
 type NavItem = {
   href: string;
@@ -25,6 +27,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const { data: user } = useApiData<AuthenticatedUser>("/api/auth/me");
 
   async function handleLogout() {
     await fetch("/api/auth/logout", {
@@ -44,8 +47,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex min-h-screen max-w-full">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 w-72 border-r border-[var(--color-border)] bg-[linear-gradient(180deg,#0f2742_0%,#123a56_46%,#1b5a68_100%)] px-6 py-6 text-white transition md:static md:block",
-            open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-[var(--color-border)] bg-[linear-gradient(180deg,#0f2742_0%,#123a56_46%,#1b5a68_100%)] px-6 py-6 text-white transition md:static md:translate-x-0",
+            open ? "translate-x-0" : "-translate-x-full",
           )}
         >
           <div className="flex items-center justify-between">
@@ -90,13 +93,31 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
+
+          <div className="mt-auto rounded-2xl border border-white/10 bg-white/8 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-sky-100/60">
+              Current User
+            </p>
+            <p className="mt-3 text-sm font-semibold">
+              {user?.name ?? "Loading..."}
+            </p>
+            <p className="mt-1 text-xs text-sky-100/70">{user?.email ?? ""}</p>
+            <p className="mt-3 text-xs uppercase tracking-[0.2em] text-sky-100/60">
+              {user?.role ?? "viewer"}
+            </p>
+          </div>
         </aside>
 
         <div className="flex min-h-screen flex-1 flex-col">
           <header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-white/80 backdrop-blur">
             <div className="flex items-center justify-between gap-4 px-4 py-4 md:px-8">
               <div className="flex items-center gap-3">
-                <Button onClick={() => setOpen(true)} type="button" variant="secondary" className="md:hidden">
+                <Button
+                  onClick={() => setOpen(true)}
+                  type="button"
+                  variant="secondary"
+                  className="md:hidden"
+                >
                   Menu
                 </Button>
                 <div>

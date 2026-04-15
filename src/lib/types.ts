@@ -92,6 +92,9 @@ export type CreateUserProfilePayload = {
   status?: string;
 };
 
+export type UpdateUserRequestBody = Partial<
+  Pick<DashboardUser, "name" | "email" | "role" | "status" | "telegram_chat_id">
+>;
 
 export type SendTelegramRequestBody = {
   recipient_chat_id: string;

@@ -12,8 +12,6 @@ import type {
   CreateUserRequestBody,
   DashboardUser,
   UpdateUserRequestBody,
-  Device,
-  DeviceStatus,
   SensorReading,
   Device,
   DeviceStatus,
@@ -797,6 +795,12 @@ export async function getUsers(filters: { role?: string | null; status?: string 
 
   const snapshot = await query.orderBy("created_at", "desc").get();
   return snapshot.docs.map((doc) => mapUserDoc(doc.id, doc.data()));
+}
+
+export async function getUserById(uid: string) {
+  const snapshot = await adminDb.collection("users").doc(uid).get();
+  if (!snapshot.exists) return null;
+  return mapUserDoc(snapshot.id, snapshot.data());
 }
 
 export async function createUser(

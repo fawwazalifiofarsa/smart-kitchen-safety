@@ -5,6 +5,7 @@ import { adminAuth, adminDb } from "./firebase/admin";
 
 import type {
   Alert,
+  AlertSeverity,
   AuthenticatedUser,
   SystemSettings,
   CreateAlertRequestBody,
@@ -13,6 +14,12 @@ import type {
   UpdateUserRequestBody,
   Device,
   DeviceStatus,
+  SensorReading,
+  Device,
+  DeviceStatus,
+  DeviceStatusLog,
+  UpdateDeviceRequestBody,
+  CreateDeviceRequestBody,
 } from "@/lib/types";
 
 const DEFAULT_SYSTEM_SETTINGS: Omit<SystemSettings, "updated_at" | "updated_by"> = {
@@ -34,6 +41,13 @@ type RecordData = Record<string, unknown>;
 
 function timestampNow() {
   return Timestamp.now();
+}
+
+function optionalTimestamp(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Timestamp.fromDate(date);
 }
 
 function createId(prefix: string) {
@@ -155,6 +169,184 @@ function mapAlertDoc(id: string, rawInput: unknown): Alert {
   };
 }
 
+export async function createDevice(
+  payload: CreateDeviceRequestBody,
+  actor: AuthenticatedUser,
+) {
+  await adminDb.collection("devices").doc(payload.device_id).set({
+    ...payload,
+    status: payload.is_active ? "online" : "offline",
+    last_seen_at: null,
+    installed_at: null,
+    ip_address: null,
+    last_alert_at: null,
+    battery_level: null,
+    maintenance_due_at: null,
+    created_at: timestampNow(),
+    updated_at: timestampNow(),
+  });
+
+  await writeAuditLog(actor, "create_device", "device", payload.device_id, {
+    location: payload.location,
+  });
+}
+
+function baseMapDevice(id: string, rawInput: unknown): Device {
+  const raw = ensureRecord(rawInput);
+  return {
+    device_id: typeof raw.device_id === "string" ? raw.device_id : id,
+    name: typeof raw.name === "string" ? raw.name : "Unnamed Device",
+    location: typeof raw.location === "string" ? raw.location : "-",
+    room: typeof raw.room === "string" ? raw.room : null,
+    status: typeof raw.status === "string" ? raw.status : "offline",
+    firmware_version:
+      typeof raw.firmware_version === "string" ? raw.firmware_version : null,
+    ip_address: typeof raw.ip_address === "string" ? raw.ip_address : null,
+    wifi_ssid: typeof raw.wifi_ssid === "string" ? raw.wifi_ssid : null,
+    last_seen_at: serializeTimestamp(raw.last_seen_at),
+    installed_at: serializeTimestamp(raw.installed_at),
+    is_active: raw.is_active === false ? false : true,
+    gas_sensor_enabled: raw.gas_sensor_enabled === false ? false : true,
+    flame_sensor_enabled: raw.flame_sensor_enabled === false ? false : true,
+    temp_sensor_enabled: raw.temp_sensor_enabled === false ? false : true,
+    humidity_sensor_enabled: raw.humidity_sensor_enabled === false ? false : true,
+    last_alert_at: serializeTimestamp(raw.last_alert_at),
+    battery_level:
+      typeof raw.battery_level === "number" ? raw.battery_level : null,
+    local_alarm_enabled: raw.local_alarm_enabled === false ? false : true,
+    maintenance_due_at: serializeTimestamp(raw.maintenance_due_at),
+    created_at: serializeTimestamp(raw.created_at),
+    updated_at: serializeTimestamp(raw.updated_at),
+  };
+}
+
+function mapReadingDoc(id: string, rawInput: unknown): SensorReading {
+  const raw = ensureRecord(rawInput);
+  return {
+    reading_id: id,
+    device_id: typeof raw.device_id === "string" ? raw.device_id : "",
+    temperature_c:
+      typeof raw.temperature_c === "number" ? raw.temperature_c : 0,
+    humidity_pct: typeof raw.humidity_pct === "number" ? raw.humidity_pct : 0,
+    gas_ppm: typeof raw.gas_ppm === "number" ? raw.gas_ppm : 0,
+    smoke_pct: typeof raw.smoke_pct === "number" ? raw.smoke_pct : null,
+    flame_detected: raw.flame_detected === true,
+    buzzer_active:
+      typeof raw.buzzer_active === "boolean" ? raw.buzzer_active : null,
+    safe_status: typeof raw.safe_status === "string" ? raw.safe_status : "safe",
+    source: typeof raw.source === "string" ? raw.source : "device",
+    recorded_at: serializeTimestamp(raw.recorded_at),
+  };
+}
+function mapStatusLogDoc(id: string, rawInput: unknown): DeviceStatusLog {
+  const raw = ensureRecord(rawInput);
+  return {
+    log_id: id,
+    device_id: typeof raw.device_id === "string" ? raw.device_id : "",
+    previous_status:
+      typeof raw.previous_status === "string" ? raw.previous_status : null,
+    new_status: typeof raw.new_status === "string" ? raw.new_status : "offline",
+    reason: typeof raw.reason === "string" ? raw.reason : "system_update",
+    created_at: serializeTimestamp(raw.created_at),
+  };
+}
+
+export async function getDeviceById(deviceId: string) {
+  const settings = await getSystemSettings();
+  const snapshot = await adminDb.collection("devices").doc(deviceId).get();
+  if (!snapshot.exists) return null;
+  const device = baseMapDevice(snapshot.id, snapshot.data());
+  return { ...device, status: computeDeviceStatus(device, settings) };
+}
+
+export async function getDevices(filters: {
+  search?: string | null;
+  status?: string | null;
+  location?: string | null;
+}) {
+  const settings = await getSystemSettings();
+  let query: FirebaseFirestore.Query = adminDb.collection("devices");
+  if (filters.location) query = query.where("location", "==", filters.location);
+  const snapshot = await query.orderBy("created_at", "desc").get();
+
+  return snapshot.docs
+    .map((doc) => {
+      const device = baseMapDevice(doc.id, doc.data());
+      return { ...device, status: computeDeviceStatus(device, settings) };
+    })
+    .filter((device) => {
+      const matchesStatus = filters.status ? device.status === filters.status : true;
+      const needle = filters.search?.trim().toLowerCase();
+      const haystack = [device.device_id, device.name, device.location, device.room]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesSearch = needle ? haystack.includes(needle) : true;
+      return matchesStatus && matchesSearch;
+    });
+}
+
+export async function deactivateDevice(deviceId: string, actor: AuthenticatedUser) {
+  await adminDb.collection("devices").doc(deviceId).set(
+    {
+      is_active: false,
+      status: "offline",
+      updated_at: timestampNow(),
+    },
+    { merge: true },
+  );
+
+  await writeAuditLog(actor, "delete_device", "device", deviceId, {});
+}
+
+export async function updateDevice(
+  deviceId: string,
+  payload: UpdateDeviceRequestBody,
+  actor: AuthenticatedUser,
+) {
+  const patch: Record<string, unknown> = {
+    ...payload,
+    updated_at: timestampNow(),
+  };
+  if (payload.maintenance_due_at !== undefined) {
+    patch.maintenance_due_at = optionalTimestamp(payload.maintenance_due_at);
+  }
+
+  await adminDb.collection("devices").doc(deviceId).set(patch, { merge: true });
+  await writeAuditLog(actor, "update_device", "device", deviceId, payload as Record<string, unknown>);
+}
+
+function computeDeviceStatus(device: Device, settings: SystemSettings): DeviceStatus {
+  if (!device.is_active) return "offline";
+  if (!device.last_seen_at) return device.status;
+
+  const lastSeen = new Date(device.last_seen_at);
+  if (Number.isNaN(lastSeen.getTime())) return device.status;
+
+  const ageMs = Date.now() - lastSeen.getTime();
+  if (ageMs > settings.offline_timeout_seconds * 1000) return "offline";
+  if (device.status === "critical" || device.status === "warning") return device.status;
+  return "online";
+}
+
+function getDeviceKeyMap() {
+  if (!process.env.DEVICE_API_KEYS_JSON) return {};
+
+  try {
+    return JSON.parse(process.env.DEVICE_API_KEYS_JSON) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+export function verifyDeviceKey(deviceId: string, providedKey: string | null) {
+  if (!providedKey) return false;
+
+  const keyMap = getDeviceKeyMap();
+  if (keyMap[deviceId]) return keyMap[deviceId] === providedKey;
+
+  return Boolean(process.env.DEVICE_API_KEY) && process.env.DEVICE_API_KEY === providedKey;
+}
 
 async function writeNotificationLog(entry: {
   alert_id: string;
@@ -219,6 +411,50 @@ export async function createAlert(
   });
 
   return alertId;
+}
+
+export async function getStatusLogs(deviceId: string, limit: number) {
+  const snapshot = await adminDb
+    .collection("devices")
+    .doc(deviceId)
+    .collection("status_logs")
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .get();
+
+  return snapshot.docs.map((doc) => mapStatusLogDoc(doc.id, doc.data()));
+}
+
+export async function getReadings(deviceId: string, filters: { startDate?: string | null; endDate?: string | null; limit: number }) {
+  let query: FirebaseFirestore.Query = adminDb
+    .collection("devices")
+    .doc(deviceId)
+    .collection("sensor_readings")
+    .orderBy("recorded_at", "desc");
+
+  if (filters.startDate) {
+    query = query.where("recorded_at", ">=", Timestamp.fromDate(new Date(filters.startDate)));
+  }
+  if (filters.endDate) {
+    query = query.where("recorded_at", "<=", Timestamp.fromDate(new Date(filters.endDate)));
+  }
+
+  const snapshot = await query.limit(filters.limit).get();
+  return snapshot.docs.map((doc) => mapReadingDoc(doc.id, doc.data()));
+}
+
+export async function getLatestReading(deviceId: string) {
+  const snapshot = await adminDb
+    .collection("devices")
+    .doc(deviceId)
+    .collection("sensor_readings")
+    .orderBy("recorded_at", "desc")
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+  const doc = snapshot.docs[0];
+  return mapReadingDoc(doc.id, doc.data());
 }
 
 
@@ -358,6 +594,199 @@ export async function sendTelegramAlert(
     alert_id: alertId,
     channel: "telegram",
     status: "sent",
+  };
+}
+
+async function writeStatusLog(
+  deviceId: string,
+  previousStatus: string | null,
+  newStatus: string,
+  reason: string,
+) {
+  const logId = createId("statuslog");
+  await adminDb
+    .collection("devices")
+    .doc(deviceId)
+    .collection("status_logs")
+    .doc(logId)
+    .set({
+      device_id: deviceId,
+      previous_status: previousStatus,
+      new_status: newStatus,
+      reason,
+      created_at: timestampNow(),
+    });
+}
+
+function alertTypeFromReading(reading: {
+  flame_detected: boolean;
+  gas_ppm: number;
+}) {
+  if (reading.flame_detected) return "fire_detected";
+  if (reading.gas_ppm > 0) return "gas_leak";
+  return "high_temperature";
+}
+
+function severityFromSafeStatus(status: string): AlertSeverity {
+  if (status === "danger") return "critical";
+  if (status === "warning") return "warning";
+  return "info";
+}
+
+async function ensureAlertForReading(
+  device: Device,
+  reading: {
+    temperature_c: number;
+    humidity_pct: number;
+    gas_ppm: number;
+    flame_detected: boolean;
+  },
+  safeStatus: string,
+) {
+  if (safeStatus === "safe") return null;
+
+  const type = alertTypeFromReading(reading);
+  const severity = severityFromSafeStatus(safeStatus);
+  const existingSnapshot = await adminDb
+    .collection("alerts")
+    .where("device_id", "==", device.device_id)
+    .orderBy("created_at", "desc")
+    .limit(10)
+    .get();
+
+  const existing = existingSnapshot.docs
+    .map((doc) => mapAlertDoc(doc.id, doc.data()))
+    .find(
+      (alert) =>
+        alert.type === type &&
+        (alert.status === "active" || alert.status === "acknowledged"),
+    );
+
+  if (existing) {
+    return existing.alert_id;
+  }
+
+  const alertId = createId("alert");
+  await adminDb.collection("alerts").doc(alertId).set({
+    alert_id: alertId,
+    device_id: device.device_id,
+    type,
+    severity,
+    title:
+      type === "fire_detected"
+        ? "Api terdeteksi"
+        : type === "gas_leak"
+          ? "Kebocoran gas terdeteksi"
+          : "Suhu tinggi terdeteksi",
+    message: `${device.name} memicu status ${safeStatus}.`,
+    trigger_values: {
+      gas_ppm: reading.gas_ppm,
+      temperature_c: reading.temperature_c,
+      flame_detected: reading.flame_detected,
+      humidity_pct: reading.humidity_pct,
+    },
+    status: "active",
+    telegram_sent: false,
+    telegram_sent_at: null,
+    acknowledged_by: null,
+    acknowledged_at: null,
+    resolved_at: null,
+    created_at: timestampNow(),
+    updated_at: timestampNow(),
+  });
+
+  return alertId;
+}
+
+function computeSafeStatus(
+  reading: {
+    temperature_c: number;
+    humidity_pct: number;
+    gas_ppm: number;
+    smoke_pct?: number | null;
+    flame_detected: boolean;
+  },
+  settings: SystemSettings,
+) {
+  if (
+    reading.flame_detected ||
+    reading.gas_ppm >= settings.gas_threshold_danger ||
+    reading.temperature_c >= settings.temperature_threshold_danger
+  ) {
+    return "danger";
+  }
+
+  if (
+    reading.gas_ppm >= settings.gas_threshold_warning ||
+    reading.temperature_c >= settings.temperature_threshold_warning
+  ) {
+    return "warning";
+  }
+
+  return "safe";
+}
+
+
+export async function ingestReading(
+  deviceId: string,
+  payload: {
+    temperature_c: number;
+    humidity_pct: number;
+    gas_ppm: number;
+    smoke_pct?: number | null;
+    flame_detected: boolean;
+    buzzer_active?: boolean | null;
+    source: string;
+    recorded_at?: string;
+  },
+) {
+  const device = await getDeviceById(deviceId);
+  if (!device) return null;
+
+  const settings = await getSystemSettings();
+  const safeStatus = computeSafeStatus(payload, settings);
+  const readingId = createId("reading");
+  const recordedAt = optionalTimestamp(payload.recorded_at) ?? timestampNow();
+  const nextDeviceStatus: DeviceStatus =
+    safeStatus === "danger" ? "critical" : safeStatus === "warning" ? "warning" : "online";
+
+  await adminDb
+    .collection("devices")
+    .doc(deviceId)
+    .collection("sensor_readings")
+    .doc(readingId)
+    .set({
+      device_id: deviceId,
+      temperature_c: payload.temperature_c,
+      humidity_pct: payload.humidity_pct,
+      gas_ppm: payload.gas_ppm,
+      smoke_pct: payload.smoke_pct ?? null,
+      flame_detected: payload.flame_detected,
+      buzzer_active: payload.buzzer_active ?? null,
+      safe_status: safeStatus,
+      source: payload.source,
+      recorded_at: recordedAt,
+    });
+
+  await adminDb.collection("devices").doc(deviceId).set(
+    {
+      status: nextDeviceStatus,
+      last_seen_at: recordedAt,
+      last_alert_at: safeStatus === "safe" ? device.last_alert_at : timestampNow(),
+      updated_at: timestampNow(),
+    },
+    { merge: true },
+  );
+
+  if (device.status !== nextDeviceStatus) {
+    await writeStatusLog(deviceId, device.status, nextDeviceStatus, "sensor_ingestion");
+  }
+
+  await ensureAlertForReading(device, payload, safeStatus);
+
+  return {
+    reading_id: readingId,
+    safe_status: safeStatus,
   };
 }
 

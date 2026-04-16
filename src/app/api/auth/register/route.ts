@@ -5,7 +5,7 @@ import {
   createUserWithPassword,
   createUserProfile,
   getUserFromAccessToken,
-  setSessionCookie,
+  setAuthCookies,
 } from "@/lib/firebase/auth";
 import type { RegisterRequestBody } from "@/lib/types";
 import { errorResponse, readJsonBody, successResponse } from "@/lib/utils/http";
@@ -67,7 +67,10 @@ export async function POST(request: NextRequest) {
       },
     );
 
-    setSessionCookie(response, sessionCookie);
+    setAuthCookies(response, {
+      sessionCookie,
+      refreshToken: register.refreshToken,
+    });
     return response;
   } catch (error) {
     return errorResponse(

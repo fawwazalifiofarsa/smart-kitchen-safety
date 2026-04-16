@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import {
   createSessionCookie,
   getUserFromAccessToken,
-  setSessionCookie,
+  setAuthCookies,
   signInWithPassword,
 } from "@/lib/firebase/auth";
 import type { LoginRequestBody } from "@/lib/types";
@@ -52,7 +52,10 @@ export async function POST(request: NextRequest) {
       },
     );
 
-    setSessionCookie(response, sessionCookie);
+    setAuthCookies(response, {
+      sessionCookie,
+      refreshToken: login.refreshToken,
+    });
     return response;
   } catch (error) {
     return errorResponse(

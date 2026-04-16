@@ -5,10 +5,8 @@ import type { DecodedIdToken } from "firebase-admin/auth";
 import type { AuthenticatedUser, CreateUserProfilePayload } from "@/lib/types";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { firebaseClientDb } from "@/lib/firebase/client";
-
 export const SESSION_COOKIE_NAME = "smart-kitchen-session";
+export const REFRESH_TOKEN_COOKIE_NAME = "smart-kitchen-refresh-token";
 export const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 5;
 export const SESSION_DURATION_SECONDS = SESSION_DURATION_MS / 1000;
 
@@ -125,14 +123,14 @@ export async function createUserWithPassword(email: string, password: string) {
 }
 
 export async function createUserProfile(payload: CreateUserProfilePayload) {
-  await setDoc(doc(firebaseClientDb, "users", payload.uid), {
+  await adminDb.collection("users").doc(payload.uid).set({
     uid: payload.uid,
     name: payload.name,
     email: payload.email,
     role: payload.role ?? "user",
     status: payload.status ?? "active",
-    created_at: serverTimestamp(),
-    updated_at: serverTimestamp(),
+    created_at: new Date(),
+    updated_at: new Date(),
     last_login_at: null,
   });
 }
@@ -217,6 +215,35 @@ export function setSessionCookie<T extends CookieCarrier>(
   return response;
 }
 
+export function setRefreshTokenCookie<T extends CookieCarrier>(
+  response: T,
+  value: string,
+) {
+  response.cookies.set({
+    name: REFRESH_TOKEN_COOKIE_NAME,
+    value,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: SESSION_DURATION_SECONDS,
+  });
+
+  return response;
+}
+
+export function setAuthCookies<T extends CookieCarrier>(
+  response: T,
+  payload: {
+    sessionCookie: string;
+    refreshToken: string;
+  },
+) {
+  setSessionCookie(response, payload.sessionCookie);
+  setRefreshTokenCookie(response, payload.refreshToken);
+  return response;
+}
+
 export function clearSessionCookie<T extends CookieCarrier>(response: T) {
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
@@ -228,6 +255,26 @@ export function clearSessionCookie<T extends CookieCarrier>(response: T) {
     maxAge: 0,
   });
 
+  return response;
+}
+
+export function clearRefreshTokenCookie<T extends CookieCarrier>(response: T) {
+  response.cookies.set({
+    name: REFRESH_TOKEN_COOKIE_NAME,
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
+
+  return response;
+}
+
+export function clearAuthCookies<T extends CookieCarrier>(response: T) {
+  clearSessionCookie(response);
+  clearRefreshTokenCookie(response);
   return response;
 }
 
@@ -244,25 +291,35 @@ export async function getUserFromSessionCookie(sessionCookie: string) {
 export async function getUserFromAccessToken(
   idToken: string,
 ): Promise<AuthenticatedUser | null> {
-  const decoded = await adminAuth.verifyIdToken(idToken);
-  const uid = decoded.uid;
+  try {
+    const decoded = await adminAuth.verifyIdToken(idToken, true);
+    const user = await resolveUserProfile(decoded);
+    return user?.status === "active" ? user : null;
+  } catch {
+    return null;
+  }
+}
 
-  const snapshot = await getDoc(doc(firebaseClientDb, "users", uid));
-  if (!snapshot.exists()) return null;
+export async function refreshSessionFromRefreshToken(refreshToken: string) {
+  try {
+    const refreshed = await refreshAccessToken(refreshToken);
+    const user = await getUserFromAccessToken(refreshed.id_token);
 
-  const data = snapshot.data();
+    if (!user) {
+      return null;
+    }
 
-  if (data.status !== "active") return null;
+    const sessionCookie = await createSessionCookie(refreshed.id_token);
 
-  return {
-    uid,
-    name: typeof data.name === "string" ? data.name : (decoded.name ?? ""),
-    email: typeof data.email === "string" ? data.email : (decoded.email ?? ""),
-    role: typeof data.role === "string" ? data.role : "viewer",
-    status: typeof data.status === "string" ? data.status : "inactive",
-    telegram_chat_id:
-      typeof data.telegram_chat_id === "string" ? data.telegram_chat_id : null,
-  };
+    return {
+      user,
+      accessToken: refreshed.id_token,
+      refreshToken: refreshed.refresh_token,
+      sessionCookie,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function getRequestUser(request: Request) {

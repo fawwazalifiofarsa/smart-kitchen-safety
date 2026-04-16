@@ -58,6 +58,10 @@ export type LoginRequestBody = {
   password: string;
 };
 
+export type RefreshRequestBody = {
+  refresh_token: string;
+};
+
 export type AuthenticatedUser = Pick<
   DashboardUser,
   "uid" | "name" | "email" | "role" | "status" | "telegram_chat_id"
@@ -150,7 +154,6 @@ export type Device = {
   created_at: string | null;
   updated_at: string | null;
 };
-
 
 export type Alert = {
   alert_id: string;

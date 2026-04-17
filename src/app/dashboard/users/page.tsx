@@ -154,7 +154,7 @@ export default function UsersPage() {
                   value={createForm.role}
                 >
                   <option value="admin">Admin</option>
-                  <option value="member">Member</option>
+                  <option value="user">User</option>
                   <option value="viewer">Viewer</option>
                 </Select>
                 <Select
@@ -183,61 +183,7 @@ export default function UsersPage() {
             </form>
           </Card>
 
-          <Card>
-            <h2 className="text-lg font-semibold text-[var(--color-foreground)]">
-              Update User
-            </h2>
-            <form className="mt-5 space-y-4" onSubmit={handleUpdate}>
-              <Input
-                onChange={(event) =>
-                  setEditForm((current) => ({ ...current, name: event.target.value }))
-                }
-                placeholder="Pilih user dari tabel"
-                value={editForm.name ?? ""}
-              />
-              <Input
-                onChange={(event) =>
-                  setEditForm((current) => ({ ...current, email: event.target.value }))
-                }
-                placeholder="Email"
-                value={editForm.email ?? ""}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <Select
-                  onChange={(event) =>
-                    setEditForm((current) => ({ ...current, role: event.target.value }))
-                  }
-                  value={editForm.role ?? "member"}
-                >
-                  <option value="admin">Admin</option>
-                  <option value="member">Member</option>
-                  <option value="viewer">Viewer</option>
-                </Select>
-                <Select
-                  onChange={(event) =>
-                    setEditForm((current) => ({ ...current, status: event.target.value }))
-                  }
-                  value={editForm.status ?? "active"}
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </Select>
-              </div>
-              <Input
-                onChange={(event) =>
-                  setEditForm((current) => ({
-                    ...current,
-                    telegram_chat_id: event.target.value,
-                  }))
-                }
-                placeholder="Telegram chat ID"
-                value={editForm.telegram_chat_id ?? ""}
-              />
-              <Button className="w-full" disabled={saving || !selectedUser} type="submit">
-                {saving ? "Saving..." : "Update user"}
-              </Button>
-            </form>
-          </Card>
+         
         </div>
       </section>
     </div>

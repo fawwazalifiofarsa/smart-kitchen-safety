@@ -13,3 +13,12 @@ export function formatDateTime(value: string | null | undefined) {
     timeStyle: "short",
   }).format(date);
 }
+
+export function formatMetric(
+  value: number | null | undefined,
+  unit: string,
+  digits = 0,
+) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  return `${value.toFixed(digits)} ${unit}`.trim();
+}

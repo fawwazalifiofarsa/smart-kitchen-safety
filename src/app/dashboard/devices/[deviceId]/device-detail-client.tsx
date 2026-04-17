@@ -4,9 +4,7 @@ import { useState } from "react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { ErrorState, LoadingState } from "@/components/ui/state";
 import { TableShell } from "@/components/ui/table";
 import type { Device, DeviceStatusLog, SensorReading } from "@/lib/types";
@@ -20,7 +18,7 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
   const statusLogs = useApiData<DeviceStatusLog[]>(
     `/api/devices/${deviceId}/status-logs?limit=20`,
   );
-  const [form, setForm] = useState({
+  const [form] = useState({
     name: "",
     location: "",
     room: "",
@@ -29,17 +27,6 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
   });
 
   const currentDevice = device.data;
-
-  
-
-  async function handleUpdate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await fetchJson(`/api/devices/${deviceId}`, {
-      method: "PATCH",
-      body: JSON.stringify(form),
-    });
-    device.reload();
-  }
 
   if (device.loading || latest.loading || readings.loading || statusLogs.loading) {
     return <LoadingState label="Memuat detail perangkat..." />;

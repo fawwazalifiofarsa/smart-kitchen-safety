@@ -881,3 +881,117 @@ export async function touchUserLastLogin(uid: string) {
     { merge: true },
   );
 }
+
+export async function getDashboardOverview() {
+  const settings = await getSystemSettings();
+  const devices = await getDevices({});
+  const alerts = await getAlerts({});
+  const latestReadings = await Promise.all(
+    devices.slice(0, 5).map(async (device) => {
+      const latest = await getLatestReading(device.device_id);
+      if (!latest) return null;
+      return {
+        device_id: device.device_id,
+        name: device.name,
+        temperature_c: latest.temperature_c,
+        humidity_pct: latest.humidity_pct,
+        gas_ppm: latest.gas_ppm,
+        smoke_pct: latest.smoke_pct,
+        flame_detected: latest.flame_detected,
+        safe_status: latest.safe_status,
+        recorded_at: latest.recorded_at,
+      };
+    }),
+  );
+
+  return {
+    devices_total: devices.length,
+    devices_online: devices.filter((device) => computeDeviceStatus(device, settings) !== "offline").length,
+    devices_offline: devices.filter((device) => computeDeviceStatus(device, settings) === "offline").length,
+    active_alerts: alerts.filter((alert) => alert.status === "active").length,
+    critical_alerts: alerts.filter((alert) => alert.severity === "critical").length,
+    latest_readings: latestReadings.filter(Boolean),
+  };
+}
+
+export async function getDashboardCharts(filters: {
+  deviceId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  interval?: string | null;
+}) {
+  const interval = filters.interval === "day" ? "day" : "hour";
+  const points: SensorReading[] = [];
+
+  if (filters.deviceId) {
+    points.push(
+      ...(await getReadings(filters.deviceId, {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        limit: 200,
+      })),
+    );
+  } else {
+    const devices = await getDevices({});
+    const readings = await Promise.all(
+      devices.slice(0, 5).map((device) =>
+        getReadings(device.device_id, {
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          limit: 60,
+        }),
+      ),
+    );
+
+    points.push(...readings.flat());
+  }
+
+  const buckets = new Map<string, Array<SensorReading>>();
+  points.forEach((point) => {
+    if (!point.recorded_at) return;
+    const key = bucketTime(new Date(point.recorded_at), interval);
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(point);
+    buckets.set(key, bucket);
+  });
+
+  return Array.from(buckets.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([time, readings]) => {
+      const sum = readings.reduce(
+        (acc, reading) => ({
+          temperature_c: acc.temperature_c + reading.temperature_c,
+          humidity_pct: acc.humidity_pct + reading.humidity_pct,
+          gas_ppm: acc.gas_ppm + reading.gas_ppm,
+          smoke_pct: acc.smoke_pct + (reading.smoke_pct ?? 0),
+        }),
+        {
+          temperature_c: 0,
+          humidity_pct: 0,
+          gas_ppm: 0,
+          smoke_pct: 0,
+        },
+      );
+      const count = readings.length || 1;
+      return {
+        time,
+        temperature_c: Number((sum.temperature_c / count).toFixed(2)),
+        humidity_pct: Number((sum.humidity_pct / count).toFixed(2)),
+        gas_ppm: Number((sum.gas_ppm / count).toFixed(2)),
+        smoke_pct: Number((sum.smoke_pct / count).toFixed(2)),
+      };
+    });
+}
+
+function bucketTime(date: Date, interval: string) {
+  if (interval === "day") {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString();
+  }
+
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    date.getHours(),
+  ).toISOString();
+}

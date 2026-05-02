@@ -62,6 +62,35 @@ export type RefreshRequestBody = {
   refresh_token: string;
 };
 
+export type DashboardOverview = {
+  devices_total: number;
+  devices_online: number;
+  devices_offline: number;
+  active_alerts: number;
+  critical_alerts: number;
+  latest_readings: Array<
+    Pick<
+      SensorReading,
+      | "device_id"
+      | "temperature_c"
+      | "humidity_pct"
+      | "gas_ppm"
+      | "smoke_pct"
+      | "flame_detected"
+      | "safe_status"
+      | "recorded_at"
+    > & { name: string }
+  >;
+};
+
+export type ChartPoint = {
+  time: string;
+  temperature_c: number | null;
+  humidity_pct: number | null;
+  gas_ppm: number | null;
+  smoke_pct: number | null;
+};
+
 export type AuthenticatedUser = Pick<
   DashboardUser,
   "uid" | "name" | "email" | "role" | "status" | "telegram_chat_id"

@@ -116,7 +116,9 @@ export async function proxy(request: NextRequest) {
     if (refreshToken) {
       const refreshed = await refreshSessionFromRefreshToken(refreshToken);
       if (refreshed) {
-        const response = NextResponse.redirect(new URL("/dashboard", request.url));
+        const response = NextResponse.redirect(
+          new URL("/dashboard", request.url),
+        );
         setAuthCookies(response, {
           sessionCookie: refreshed.sessionCookie,
           refreshToken: refreshed.refreshToken,

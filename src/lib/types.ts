@@ -160,6 +160,16 @@ export type SystemSettings = {
   updated_by: string | null;
 };
 
+export type AuditLog = {
+  log_id: string;
+  user_id: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+};
+
 export type Device = {
   device_id: string;
   name: string;

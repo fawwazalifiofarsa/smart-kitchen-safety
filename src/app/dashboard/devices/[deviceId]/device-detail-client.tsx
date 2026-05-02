@@ -2,23 +2,27 @@
 
 import { useState } from "react";
 
+import { LineChart } from "@/components/dashboard/line-chart";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ErrorState, LoadingState } from "@/components/ui/state";
 import { TableShell } from "@/components/ui/table";
-import type { Device, DeviceStatusLog, SensorReading } from "@/lib/types";
-import { formatDateTime, formatMetric} from "@/lib/utils/format";
+import type { ChartPoint, Device, DeviceStatusLog, SensorReading } from "@/lib/types";
+import { formatDateTime, formatMetric } from "@/lib/utils/format";
 import { fetchJson, useApiData } from "@/lib/use-api-data";
 
 export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
   const device = useApiData<Device>(`/api/devices/${deviceId}`);
   const latest = useApiData<SensorReading>(`/api/devices/${deviceId}/readings/latest`);
   const readings = useApiData<SensorReading[]>(`/api/devices/${deviceId}/readings?limit=20`);
+  const charts = useApiData<ChartPoint[]>(`/api/dashboard/charts?device_id=${deviceId}&interval=hour`);
   const statusLogs = useApiData<DeviceStatusLog[]>(
     `/api/devices/${deviceId}/status-logs?limit=20`,
   );
-  const [form] = useState({
+  const [form, setForm] = useState({
     name: "",
     location: "",
     room: "",
@@ -28,17 +32,27 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
 
   const currentDevice = device.data;
 
-  if (device.loading || latest.loading || readings.loading || statusLogs.loading) {
+  async function handleUpdate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await fetchJson(`/api/devices/${deviceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(form),
+    });
+    device.reload();
+  }
+
+  if (device.loading || latest.loading || readings.loading || charts.loading || statusLogs.loading) {
     return <LoadingState label="Memuat detail perangkat..." />;
   }
 
-  if (device.error || latest.error || readings.error  || statusLogs.error) {
+  if (device.error || latest.error || readings.error || charts.error || statusLogs.error) {
     return (
       <ErrorState
         message={
           device.error ??
           latest.error ??
           readings.error ??
+          charts.error ??
           statusLogs.error ??
           "Request gagal"
         }
@@ -46,10 +60,11 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
           device.reload();
           latest.reload();
           readings.reload();
+          charts.reload();
           statusLogs.reload();
         }}
       />
-    ); 
+    );
   }
 
   if (!currentDevice) return <ErrorState message="Perangkat tidak ditemukan" />;
@@ -107,6 +122,17 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
             </Card>
           ) : null}
 
+          <LineChart
+            points={charts.data ?? []}
+            series={[
+              { key: "temperature_c", label: "Temperature", color: "#dc2626" },
+              { key: "gas_ppm", label: "Gas", color: "#2563eb" },
+              { key: "humidity_pct", label: "Humidity", color: "#0f766e" },
+              { key: "smoke_pct", label: "Smoke", color: "#7c3aed" },
+            ]}
+            title="Device Monitoring Chart"
+          />
+
           <TableShell>
             <table className="min-w-full text-left text-sm">
               <thead className="bg-[var(--color-surface-muted)] text-[var(--color-muted)]">
@@ -134,6 +160,34 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
         </div>
 
         <div className="space-y-6">
+          <Card>
+            <h2 className="text-lg font-semibold text-[var(--color-foreground)]">
+              Update Device
+            </h2>
+            <form className="mt-5 space-y-4" onSubmit={handleUpdate}>
+              <Input
+                defaultValue={currentDevice.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Device name"
+              />
+              <Input
+                defaultValue={currentDevice.location}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, location: event.target.value }))
+                }
+                placeholder="Location"
+              />
+              <Input
+                defaultValue={currentDevice.room ?? ""}
+                onChange={(event) => setForm((current) => ({ ...current, room: event.target.value }))}
+                placeholder="Room"
+              />
+              <Button className="w-full" type="submit">
+                Save changes
+              </Button>
+            </form>
+          </Card>
+
           <Card>
             <h2 className="text-lg font-semibold text-[var(--color-foreground)]">
               Status Logs

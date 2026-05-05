@@ -16,7 +16,7 @@ export async function PATCH(request: NextRequest, context: Params) {
 
   const { alertId } = await context.params;
   const alert = await getAlertById(alertId);
-  if (!alert) return errorResponse("Alert tidak ditemukan", { status: 404 });
+  if (!alert) return errorResponse("Alert not found", { status: 404 });
 
   const body = await readJsonBody<AcknowledgeAlertRequestBody>(request);
   await acknowledgeAlert(alertId, actor, optionalString(body?.note) ?? undefined);
@@ -28,6 +28,7 @@ export async function PATCH(request: NextRequest, context: Params) {
       acknowledged_by: actor.uid,
       acknowledged_at: new Date().toISOString(),
     },
-    { message: "Alert berhasil di-acknowledge" },
+    { message: "Alert successfully acknowledged" },
   );
 }
+

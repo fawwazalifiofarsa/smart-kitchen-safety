@@ -17,6 +17,7 @@ import type {
   Device,
   DeviceStatus,
   DeviceStatusLog,
+  UpdateSystemSettingsRequestBody,
   UpdateDeviceRequestBody,
   CreateDeviceRequestBody,
 } from "@/lib/types";

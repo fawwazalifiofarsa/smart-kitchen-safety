@@ -146,20 +146,6 @@ export type AcknowledgeAlertRequestBody = {
   note?: string;
 };
 
-export type SystemSettings = {
-  gas_threshold_warning: number;
-  gas_threshold_danger: number;
-  temperature_threshold_warning: number;
-  temperature_threshold_danger: number;
-  offline_timeout_seconds: number;
-  telegram_enabled: boolean;
-  telegram_bot_token_ref: string | null;
-  default_alert_chat_id: string | null;
-  data_retention_days: number;
-  updated_at: string | null;
-  updated_by: string | null;
-};
-
 export type AuditLog = {
   log_id: string;
   user_id: string;
@@ -296,6 +282,20 @@ export type NotificationLog = {
   provider_response: Record<string, unknown> | string | null;
   sent_at: string | null;
   created_at: string | null;
+};
+
+export type SystemSettings = {
+  gas_threshold_warning: number;
+  gas_threshold_danger: number;
+  temperature_threshold_warning: number;
+  temperature_threshold_danger: number;
+  offline_timeout_seconds: number;
+  telegram_enabled: boolean;
+  telegram_bot_token_ref: string | null;
+  default_alert_chat_id: string | null;
+  data_retention_days: number;
+  updated_at: string | null;
+  updated_by: string | null;
 };
 
 export type UpdateSystemSettingsRequestBody = Partial<

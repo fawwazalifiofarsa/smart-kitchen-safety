@@ -83,6 +83,14 @@ export type DashboardOverview = {
   >;
 };
 
+export type DashboardOverviewSummary = {
+  totalDevices: number;
+  activeDevices: number;
+  totalAlerts: number;
+  unresolvedAlerts: number;
+  totalUsers: number;
+};
+
 export type ChartPoint = {
   time: string;
   temperature_c: number | null;

@@ -2,6 +2,7 @@
 
 import { useApiData } from "@/lib/use-api-data";
 import type { Alert, ChartPoint, DashboardOverview } from "@/lib/types";
+import { useDashboardOverview } from "@/hooks/use-dashboard-overview";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { LineChart } from "@/components/dashboard/line-chart";
@@ -11,18 +12,25 @@ import { Badge } from "@/components/ui/badge";
 import { formatDateTime, formatMetric } from "@/lib/utils/format";
 
 export default function DashboardOverviewPage() {
+  const realtimeSummary = useDashboardOverview();
   const overview = useApiData<DashboardOverview>("/api/dashboard/overview");
   const charts = useApiData<ChartPoint[]>("/api/dashboard/charts?interval=hour");
   const alerts = useApiData<Alert[]>("/api/alerts?status=active");
 
-  if (overview.loading || charts.loading || alerts.loading) {
+  if (realtimeSummary.loading || overview.loading || charts.loading || alerts.loading) {
     return <LoadingState label="Memuat dashboard overview..." />;
   }
 
-  if (overview.error || charts.error || alerts.error) {
+  if (realtimeSummary.error || overview.error || charts.error || alerts.error) {
     return (
       <ErrorState
-        message={overview.error ?? charts.error ?? alerts.error ?? "Request gagal"}
+        message={
+          realtimeSummary.error ??
+          overview.error ??
+          charts.error ??
+          alerts.error ??
+          "Request gagal"
+        }
         onRetry={() => {
           overview.reload();
           charts.reload();
@@ -31,6 +39,9 @@ export default function DashboardOverviewPage() {
       />
     );
   }
+
+  const summary = realtimeSummary.data;
+  const offlineDevices = Math.max(summary.totalDevices - summary.activeDevices, 0);
 
   if (!overview.data) {
     return (
@@ -48,36 +59,42 @@ export default function DashboardOverviewPage() {
         title="Dashboard Overview"
       />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <StatCard
           hint="Total perangkat terdaftar"
           href="/dashboard/devices"
           label="Devices Total"
-          value={`${overview.data.devices_total}`}
+          value={`${summary.totalDevices}`}
         />
         <StatCard
           hint="Perangkat aktif dan terhubung"
           href="/dashboard/devices"
           label="Devices Online"
-          value={`${overview.data.devices_online}`}
+          value={`${summary.activeDevices}`}
         />
         <StatCard
           hint="Perangkat tidak aktif atau timeout"
           href="/dashboard/devices"
           label="Devices Offline"
-          value={`${overview.data.devices_offline}`}
+          value={`${offlineDevices}`}
+        />
+        <StatCard
+          hint="Semua alert yang tercatat"
+          href="/dashboard/alerts"
+          label="Alerts Total"
+          value={`${summary.totalAlerts}`}
         />
         <StatCard
           hint="Alert yang masih membutuhkan tindak lanjut"
           href="/dashboard/alerts"
-          label="Active Alerts"
-          value={`${overview.data.active_alerts}`}
+          label="Unresolved Alerts"
+          value={`${summary.unresolvedAlerts}`}
         />
         <StatCard
-          hint="Alert level kritis"
-          href="/dashboard/alerts"
-          label="Critical Alerts"
-          value={`${overview.data.critical_alerts}`}
+          hint="Total user dashboard"
+          href="/dashboard/users"
+          label="Users Total"
+          value={`${summary.totalUsers}`}
         />
       </section>
 

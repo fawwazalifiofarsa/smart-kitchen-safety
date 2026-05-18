@@ -21,6 +21,7 @@ const navigation: NavItem[] = [
   { href: "/dashboard/monitoring", label: "Monitoring", shortLabel: "MN" },
   { href: "/dashboard/alerts", label: "Alerts", shortLabel: "AL" },
   { href: "/dashboard/users", label: "Users", shortLabel: "US" },
+  { href: "/dashboard/audit-logs", label: "Audit Logs", shortLabel: "AU" },
 ];
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {

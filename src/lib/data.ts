@@ -995,3 +995,25 @@ function bucketTime(date: Date, interval: string) {
     date.getHours(),
   ).toISOString();
 }
+
+export async function getAuditLogs(filters: {
+  userId?: string | null;
+  action?: string | null;
+}) {
+  let query: FirebaseFirestore.Query = adminDb.collection("audit_logs");
+  if (filters.userId) query = query.where("user_id", "==", filters.userId);
+  if (filters.action) query = query.where("action", "==", filters.action);
+  const snapshot = await query.orderBy("created_at", "desc").get();
+  return snapshot.docs.map((doc) => ({
+    log_id: doc.id,
+    user_id: typeof doc.data().user_id === "string" ? doc.data().user_id : "",
+    action: typeof doc.data().action === "string" ? doc.data().action : "unknown_action",
+    target_type:
+      typeof doc.data().target_type === "string"
+        ? doc.data().target_type
+        : "unknown_target",
+    target_id: typeof doc.data().target_id === "string" ? doc.data().target_id : null,
+    metadata: ensureRecord(doc.data().metadata),
+    created_at: serializeTimestamp(doc.data().created_at),
+  }));
+}

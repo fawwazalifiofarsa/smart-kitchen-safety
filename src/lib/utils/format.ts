@@ -36,3 +36,12 @@ export function formatMetric(
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
   return `${value.toFixed(digits)} ${unit}`.trim();
 }
+
+export function fromDateTimeInputValue(value: string) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toISOString();
+}

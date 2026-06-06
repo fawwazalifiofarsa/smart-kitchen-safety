@@ -16,7 +16,7 @@ const char* deviceName = "Kitchen Node 1";
 const char* deviceLocation = "Unassigned";
 const char* deviceRoom = "Kitchen";
 const char* deviceApiKey = "test";
-const char* ingestionUrl = "https://c4bb-36-85-60-131.ngrok-free.app/api/devices/device_real/readings";
+const char* ingestionUrl = "http://172.20.10.2:3000/api/devices/device_real/readings";
 
 // ================= PIN =================
 const int pinMQ2 = A0;
@@ -183,6 +183,7 @@ void loop()
         payload += "}";
 
         http.begin(client, ingestionUrl);
+        http.setTimeout(5000);
         http.addHeader("Content-Type", "application/json");
         http.addHeader("ngrok-skip-browser-warning", "true");
         http.addHeader("x-device-key", deviceApiKey);

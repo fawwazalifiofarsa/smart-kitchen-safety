@@ -2,7 +2,6 @@
 #include <LiquidCrystal_I2C.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
-#include <WiFiClientSecure.h>
 
 // ================= LCD =================
 LiquidCrystal_I2C lcd(0x27, 20, 4);
@@ -146,9 +145,7 @@ void loop()
 
     if (WiFi.status() == WL_CONNECTED)
     {
-        WiFiClientSecure client;
-        client.setInsecure();
-
+        WiFiClient client;
         HTTPClient http;
 
         String payload = "{";

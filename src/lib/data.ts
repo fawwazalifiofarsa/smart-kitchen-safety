@@ -1038,36 +1038,3 @@ export async function getAuditLogs(filters: {
     created_at: serializeTimestamp(doc.data().created_at),
   }));
 }
-
-export async function getNotificationLogs(filters: {
-  status?: string | null;
-  alertId?: string | null;
-}) {
-  let query: FirebaseFirestore.Query = adminDb.collection("notification_logs");
-  if (filters.status) query = query.where("status", "==", filters.status);
-  if (filters.alertId) query = query.where("alert_id", "==", filters.alertId);
-  const snapshot = await query.orderBy("created_at", "desc").get();
-  return snapshot.docs.map((doc) => mapNotificationLogDoc(doc.id, doc.data()));
-}
-
-function mapNotificationLogDoc(id: string, rawInput: unknown): NotificationLog {
-  const raw = ensureRecord(rawInput);
-  const providerResponse = raw.provider_response;
-
-  return {
-    log_id: id,
-    alert_id: typeof raw.alert_id === "string" ? raw.alert_id : "",
-    device_id: typeof raw.device_id === "string" ? raw.device_id : "",
-    channel: typeof raw.channel === "string" ? raw.channel : "telegram",
-    recipient: typeof raw.recipient === "string" ? raw.recipient : "",
-    message: typeof raw.message === "string" ? raw.message : "",
-    status: typeof raw.status === "string" ? raw.status : "pending",
-    provider_response:
-      typeof providerResponse === "string" ||
-        (typeof providerResponse === "object" && providerResponse !== null)
-        ? (providerResponse as NotificationLog["provider_response"])
-        : null,
-    sent_at: serializeTimestamp(raw.sent_at),
-    created_at: serializeTimestamp(raw.created_at),
-  };
-}

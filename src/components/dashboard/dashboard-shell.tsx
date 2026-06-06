@@ -126,7 +126,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     Live Monitoring Dashboard
                   </p>
                   <p className="text-sm font-semibold text-[var(--color-foreground)]">
-                    Kitchen gas, fire, temperature, humidity, and device health
+                    Kitchen gas, fire, and device health
                   </p>
                 </div>
               </div>

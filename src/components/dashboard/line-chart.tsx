@@ -2,17 +2,15 @@ import { Card } from "@/components/ui/card";
 import { formatCompactDate } from "@/lib/utils/format";
 
 type ChartSeries = {
-  key: "temperature_c" | "humidity_pct" | "gas_ppm" | "smoke_pct";
+  key: "gas_ppm" | "flame_raw";
   label: string;
   color: string;
 };
 
 type ChartDataPoint = {
   time: string;
-  temperature_c: number | null;
-  humidity_pct: number | null;
   gas_ppm: number | null;
-  smoke_pct: number | null;
+  flame_raw: number | null;
 };
 
 export function LineChart({

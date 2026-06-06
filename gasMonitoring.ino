@@ -1,32 +1,42 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <ESP8266WiFi.h>
-#include <Firebase_ESP_Client.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
 
 // ================= LCD =================
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
 // ================= WIFI =================
-const char* ssid = "Iphone";
+const char* ssid = "iPhone";
 const char* password = "rahasiaa";
 
-// ================= FIREBASE =================
-#define API_KEY "AIzaSyC60KmS0DNcm8dZGCjlFsvBNFO-xwQ3P0U"
-#define DATABASE_URL "gasfiremonitoring-default-rtdb.firebaseio.com"
-#define USER_EMAIL "test@gmail.com"
-#define USER_PASSWORD "123456"
-
-FirebaseData fbdo;
-FirebaseAuth auth;
-FirebaseConfig config;
+// ================= BACKEND API =================
+const char* deviceId = "device_real";
+const char* deviceName = "Kitchen Node 1";
+const char* deviceLocation = "Unassigned";
+const char* deviceRoom = "Kitchen";
+const char* deviceApiKey = "test";
+const char* ingestionUrl = "https://c4bb-36-85-60-131.ngrok-free.app/api/devices/device_real/readings";
 
 // ================= PIN =================
 const int pinMQ2 = A0;
 const int pinFlame = 5; // D5
 
-// ================= CLEANUP =================
-unsigned long lastCleanup = 0;
-const unsigned long cleanupInterval = 300000; // 5 menit
+String jsonEscape(const String& value)
+{
+    String escaped = "";
+    for (unsigned int i = 0; i < value.length(); i++)
+    {
+        char c = value.charAt(i);
+        if (c == '"' || c == '\\')
+        {
+            escaped += '\\';
+        }
+        escaped += c;
+    }
+    return escaped;
+}
 
 void setup()
 {
@@ -59,22 +69,6 @@ void setup()
     Serial.println();
     Serial.println("WiFi Connected");
 
-    // ================= FIREBASE =================
-    config.api_key = API_KEY;
-    auth.user.email = USER_EMAIL;
-    auth.user.password = USER_PASSWORD;
-    config.database_url = DATABASE_URL;
-
-    Firebase.begin(&config, &auth);
-    Firebase.reconnectWiFi(true);
-
-    while (!Firebase.ready())
-    {
-        delay(500);
-    }
-
-    Serial.println("Firebase Connected");
-
     lcd.setCursor(0, 0);
     lcd.print("System Ready");
 
@@ -88,6 +82,7 @@ void loop()
 
     int nilaiMQ2 = analogRead(pinMQ2);
     int statusFlame = digitalRead(pinFlame);
+    bool flameDetected = statusFlame == LOW;
 
     String flameMsg;
     String statusMsg;
@@ -96,7 +91,7 @@ void loop()
     // LOW = ADA API
     // HIGH = TIDAK ADA API
 
-    if (statusFlame == LOW)
+    if (flameDetected)
     {
         flameMsg = "ADA API";
     }
@@ -107,7 +102,7 @@ void loop()
 
     // Status sistem
 
-    if (statusFlame == HIGH && nilaiMQ2 < 250)
+    if (!flameDetected && nilaiMQ2 < 250)
     {
         statusMsg = "AMAN";
     }
@@ -147,64 +142,82 @@ void loop()
     lcd.print(statusMsg);
     lcd.print("        ");
 
-    // ================= UPDATE REALTIME =================
+    // ================= SIMPAN HISTORI VIA API =================
 
-    Firebase.RTDB.setInt(
-        &fbdo,
-        "/sensor/gas",
-        nilaiMQ2);
-
-    Firebase.RTDB.setString(
-        &fbdo,
-        "/sensor/api",
-        flameMsg);
-
-    Firebase.RTDB.setString(
-        &fbdo,
-        "/sensor/status",
-        statusMsg);
-
-    // ================= CLEANUP LOG =================
-
-    if (millis() - lastCleanup >= cleanupInterval)
+    if (WiFi.status() == WL_CONNECTED)
     {
-        Serial.println("Cleaning sensor_logs...");
+        WiFiClientSecure client;
+        client.setInsecure();
 
-        if (Firebase.RTDB.deleteNode(
-                &fbdo,
-                "/sensor_logs"))
+        HTTPClient http;
+
+        String payload = "{";
+        payload += "\"device_id\":\"";
+        payload += jsonEscape(String(deviceId));
+        payload += "\",";
+        payload += "\"device_name\":\"";
+        payload += jsonEscape(String(deviceName));
+        payload += "\",";
+        payload += "\"location\":\"";
+        payload += jsonEscape(String(deviceLocation));
+        payload += "\",";
+        payload += "\"room\":\"";
+        payload += jsonEscape(String(deviceRoom));
+        payload += "\",";
+        payload += "\"gas\":";
+        payload += String(nilaiMQ2);
+        payload += ",";
+        payload += "\"flame_raw\":";
+        payload += String(statusFlame);
+        payload += ",";
+        payload += "\"flame_detected\":";
+        payload += (flameDetected ? "true" : "false");
+        payload += ",";
+        payload += "\"flame_message\":\"";
+        payload += jsonEscape(flameMsg);
+        payload += "\",";
+        payload += "\"detection_status\":\"";
+        payload += jsonEscape(statusMsg);
+        payload += "\",";
+        payload += "\"esp_millis\":";
+        payload += String(millis());
+        payload += ",";
+        payload += "\"source\":\"esp8266\"";
+        payload += "}";
+
+        http.begin(client, ingestionUrl);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("ngrok-skip-browser-warning", "true");
+        http.addHeader("x-device-key", deviceApiKey);
+        http.addHeader("x-esp-device", deviceId);
+
+        Serial.print("POST ");
+        Serial.println(ingestionUrl);
+        Serial.print("Payload: ");
+        Serial.println(payload);
+
+        int responseCode = http.POST(payload);
+        String responseBody = http.getString();
+        if (responseCode > 0)
         {
-            Serial.println("sensor_logs cleaned");
+            Serial.print("API Response: ");
+            Serial.println(responseCode);
+            Serial.print("API Body: ");
+            Serial.println(responseBody);
         }
         else
         {
-            Serial.print("Cleanup Error: ");
-            Serial.println(fbdo.errorReason());
+            Serial.print("API Error: ");
+            Serial.println(http.errorToString(responseCode));
+            Serial.print("API Body: ");
+            Serial.println(responseBody);
         }
 
-        lastCleanup = millis();
-    }
-
-    // ================= SIMPAN HISTORI =================
-
-    FirebaseJson logData;
-
-    logData.set("gas", nilaiMQ2);
-    logData.set("api", flameMsg);
-    logData.set("status", statusMsg);
-    logData.set("esp_millis", millis());
-
-    if (Firebase.RTDB.pushJSON(
-            &fbdo,
-            "/sensor_logs",
-            &logData))
-    {
-        Serial.println("History Saved");
+        http.end();
     }
     else
     {
-        Serial.print("Firebase Error : ");
-        Serial.println(fbdo.errorReason());
+        Serial.println("WiFi disconnected, skip API send");
     }
 
     // ================= DELAY =================

@@ -24,8 +24,6 @@ const emptyForm: CreateDeviceRequestBody = {
   wifi_ssid: "",
   gas_sensor_enabled: true,
   flame_sensor_enabled: true,
-  temp_sensor_enabled: true,
-  humidity_sensor_enabled: true,
   local_alarm_enabled: true,
   is_active: true,
 };

@@ -292,3 +292,20 @@ export type UpdateDeviceRequestBody = Partial<
     | "maintenance_due_at"
   >
 >;
+
+export type NotificationLog = {
+  log_id: string;
+  alert_id: string;
+  device_id: string;
+  channel: string;
+  recipient: string;
+  message: string;
+  status: string;
+  provider_response: Record<string, unknown> | string | null;
+  sent_at: string | null;
+  created_at: string | null;
+};
+
+export type UpdateSystemSettingsRequestBody = Partial<
+  Omit<SystemSettings, "updated_at" | "updated_by">
+>;

@@ -30,8 +30,9 @@ const DEFAULT_SYSTEM_SETTINGS: Omit<SystemSettings, "updated_at" | "updated_by">
   telegram_bot_token_ref: null,
   default_alert_chat_id: null,
   data_retention_days: 30,
+  temperature_threshold_warning: 0,
+  temperature_threshold_danger: 100,
 };
-
 
 type RecordData = Record<string, unknown>;
 
@@ -117,6 +118,14 @@ function mapSystemSettings(rawInput: unknown): SystemSettings {
         : DEFAULT_SYSTEM_SETTINGS.data_retention_days,
     updated_at: serializeTimestamp(raw.updated_at),
     updated_by: typeof raw.updated_by === "string" ? raw.updated_by : null,
+    temperature_threshold_warning:
+      typeof raw.temperature_threshold_warning === "number"
+        ? raw.temperature_threshold_warning
+        : DEFAULT_SYSTEM_SETTINGS.temperature_threshold_warning,
+    temperature_threshold_danger:
+      typeof raw.temperature_threshold_danger === "number"
+        ? raw.temperature_threshold_danger
+        : DEFAULT_SYSTEM_SETTINGS.temperature_threshold_danger,
   };
 }
 

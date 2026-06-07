@@ -36,9 +36,9 @@ export type DeviceStatus =
 
 export type AlertTriggerValues = {
   gas_ppm: number | null;
-  temperature_c: number | null;
+  flame_raw: number | null;
   flame_detected: boolean | null;
-  humidity_pct: number | null;
+  detection_status: string | null;
 };
 
 export type DashboardUser = {
@@ -72,11 +72,11 @@ export type DashboardOverview = {
     Pick<
       SensorReading,
       | "device_id"
-      | "temperature_c"
-      | "humidity_pct"
       | "gas_ppm"
-      | "smoke_pct"
+      | "flame_raw"
       | "flame_detected"
+      | "flame_message"
+      | "detection_status"
       | "safe_status"
       | "recorded_at"
     > & { name: string }
@@ -93,10 +93,8 @@ export type DashboardOverviewSummary = {
 
 export type ChartPoint = {
   time: string;
-  temperature_c: number | null;
-  humidity_pct: number | null;
   gas_ppm: number | null;
-  smoke_pct: number | null;
+  flame_raw: number | null;
 };
 
 export type AuthenticatedUser = Pick<
@@ -154,6 +152,7 @@ export type AcknowledgeAlertRequestBody = {
   note?: string;
 };
 
+
 export type AuditLog = {
   log_id: string;
   user_id: string;
@@ -178,8 +177,6 @@ export type Device = {
   is_active: boolean;
   gas_sensor_enabled: boolean;
   flame_sensor_enabled: boolean;
-  temp_sensor_enabled: boolean;
-  humidity_sensor_enabled: boolean;
   last_alert_at: string | null;
   battery_level: number | null;
   local_alarm_enabled: boolean;
@@ -213,25 +210,32 @@ export type ResolveAlertRequestBody = {
 export type SensorReading = {
   reading_id: string;
   device_id: string;
-  temperature_c: number;
-  humidity_pct: number;
   gas_ppm: number;
-  smoke_pct: number | null;
+  flame_raw: number | null;
   flame_detected: boolean;
+  flame_message: string | null;
+  detection_status: string | null;
   buzzer_active: boolean | null;
   safe_status: SafeStatus;
   source: string;
+  esp_millis: number | null;
   recorded_at: string | null;
 };
 
 export type CreateReadingRequestBody = {
-  temperature_c: number;
-  humidity_pct: number;
-  gas_ppm: number;
-  smoke_pct?: number | null;
+  device_id?: string;
+  device_name?: string | null;
+  location?: string | null;
+  room?: string | null;
+  gas_ppm?: number;
+  gas?: number;
+  flame_raw?: number | null;
   flame_detected: boolean;
+  flame_message?: string | null;
+  detection_status?: string | null;
+  esp_millis?: number | null;
   buzzer_active?: boolean | null;
-  source: string;
+  source?: string;
   recorded_at?: string;
 };
 
@@ -253,8 +257,6 @@ export type CreateDeviceRequestBody = {
   wifi_ssid?: string | null;
   gas_sensor_enabled: boolean;
   flame_sensor_enabled: boolean;
-  temp_sensor_enabled: boolean;
-  humidity_sensor_enabled: boolean;
   local_alarm_enabled: boolean;
   is_active: boolean;
 };
@@ -271,8 +273,6 @@ export type UpdateDeviceRequestBody = Partial<
     | "is_active"
     | "gas_sensor_enabled"
     | "flame_sensor_enabled"
-    | "temp_sensor_enabled"
-    | "humidity_sensor_enabled"
     | "local_alarm_enabled"
     | "battery_level"
     | "maintenance_due_at"

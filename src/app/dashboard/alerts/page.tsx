@@ -18,15 +18,15 @@ import { fetchJson, useApiData } from "@/lib/use-api-data";
 
 const emptyForm: CreateAlertRequestBody = {
   device_id: "",
-  type: "high_temperature",
+  type: "gas_leak",
   severity: "warning",
   title: "",
   message: "",
   trigger_values: {
     gas_ppm: null,
-    temperature_c: null,
+    flame_raw: null,
     flame_detected: false,
-    humidity_pct: null,
+    detection_status: null,
   },
 };
 
@@ -167,7 +167,7 @@ export default function AlertsPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, title: event.target.value }))
               }
-              placeholder="Suhu tinggi terdeteksi"
+              placeholder="Kebocoran gas terdeteksi"
               value={form.title}
             />
             <Textarea
@@ -184,7 +184,6 @@ export default function AlertsPage() {
                 }
                 value={form.type}
               >
-                <option value="high_temperature">High temperature</option>
                 <option value="gas_leak">Gas leak</option>
                 <option value="fire_detected">Fire detected</option>
               </Select>

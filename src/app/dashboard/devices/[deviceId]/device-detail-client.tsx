@@ -102,16 +102,18 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
           {latest.data ? (
             <Card className="grid gap-4 md:grid-cols-4">
               <div>
-                <p className="text-sm text-[var(--color-muted)]">Temperature</p>
-                <p className="mt-1 text-2xl font-bold">{formatMetric(latest.data.temperature_c, "°C")}</p>
-              </div>
-              <div>
-                <p className="text-sm text-[var(--color-muted)]">Humidity</p>
-                <p className="mt-1 text-2xl font-bold">{formatMetric(latest.data.humidity_pct, "%")}</p>
-              </div>
-              <div>
                 <p className="text-sm text-[var(--color-muted)]">Gas</p>
                 <p className="mt-1 text-2xl font-bold">{formatMetric(latest.data.gas_ppm, "ppm")}</p>
+              </div>
+              <div>
+                <p className="text-sm text-[var(--color-muted)]">Flame raw</p>
+                <p className="mt-1 text-2xl font-bold">{formatMetric(latest.data.flame_raw, "")}</p>
+              </div>
+              <div>
+                <p className="text-sm text-[var(--color-muted)]">Flame</p>
+                <p className="mt-1 text-2xl font-bold">
+                  {latest.data.flame_message ?? (latest.data.flame_detected ? "Detected" : "Clear")}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-[var(--color-muted)]">Latest status</p>
@@ -125,10 +127,8 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
           <LineChart
             points={charts.data ?? []}
             series={[
-              { key: "temperature_c", label: "Temperature", color: "#dc2626" },
               { key: "gas_ppm", label: "Gas", color: "#2563eb" },
-              { key: "humidity_pct", label: "Humidity", color: "#0f766e" },
-              { key: "smoke_pct", label: "Smoke", color: "#7c3aed" },
+              { key: "flame_raw", label: "Flame Raw", color: "#dc2626" },
             ]}
             title="Device Monitoring Chart"
           />
@@ -138,9 +138,9 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
               <thead className="bg-[var(--color-surface-muted)] text-[var(--color-muted)]">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Recorded</th>
-                  <th className="px-4 py-3 font-semibold">Temp</th>
-                  <th className="px-4 py-3 font-semibold">Humidity</th>
                   <th className="px-4 py-3 font-semibold">Gas</th>
+                  <th className="px-4 py-3 font-semibold">Flame Raw</th>
+                  <th className="px-4 py-3 font-semibold">Flame</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                 </tr>
               </thead>
@@ -148,9 +148,11 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
                 {(readings.data ?? []).map((reading) => (
                   <tr className="border-t border-[var(--color-border)]" key={reading.reading_id}>
                     <td className="px-4 py-3">{formatDateTime(reading.recorded_at)}</td>
-                    <td className="px-4 py-3">{formatMetric(reading.temperature_c, "°C")}</td>
-                    <td className="px-4 py-3">{formatMetric(reading.humidity_pct, "%")}</td>
                     <td className="px-4 py-3">{formatMetric(reading.gas_ppm, "ppm")}</td>
+                    <td className="px-4 py-3">{formatMetric(reading.flame_raw, "")}</td>
+                    <td className="px-4 py-3">
+                      {reading.flame_message ?? (reading.flame_detected ? "Detected" : "Clear")}
+                    </td>
                     <td className="px-4 py-3">{reading.safe_status}</td>
                   </tr>
                 ))}

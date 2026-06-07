@@ -21,8 +21,6 @@ export default function SettingsPage() {
       setForm({
         gas_threshold_warning: settings.data.gas_threshold_warning,
         gas_threshold_danger: settings.data.gas_threshold_danger,
-        temperature_threshold_warning: settings.data.temperature_threshold_warning,
-        temperature_threshold_danger: settings.data.temperature_threshold_danger,
         offline_timeout_seconds: settings.data.offline_timeout_seconds,
         telegram_enabled: settings.data.telegram_enabled,
         default_alert_chat_id: settings.data.default_alert_chat_id,
@@ -51,7 +49,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        description="Kelola threshold gas, suhu, timeout offline, Telegram, dan retensi data."
+        description="Kelola threshold gas, timeout offline, Telegram, dan retensi data."
         title="System Settings"
       />
 
@@ -78,28 +76,6 @@ export default function SettingsPage() {
             placeholder="Gas danger threshold"
             type="number"
             value={String(form.gas_threshold_danger ?? "")}
-          />
-          <Input
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                temperature_threshold_warning: Number(event.target.value),
-              }))
-            }
-            placeholder="Temperature warning threshold"
-            type="number"
-            value={String(form.temperature_threshold_warning ?? "")}
-          />
-          <Input
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                temperature_threshold_danger: Number(event.target.value),
-              }))
-            }
-            placeholder="Temperature danger threshold"
-            type="number"
-            value={String(form.temperature_threshold_danger ?? "")}
           />
           <Input
             onChange={(event) =>

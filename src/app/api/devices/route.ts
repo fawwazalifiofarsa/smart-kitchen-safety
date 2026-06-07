@@ -37,8 +37,6 @@ export async function POST(request: NextRequest) {
   const location = requiredString(body.location, "location", errors);
   const gas = requiredBoolean(body.gas_sensor_enabled, "gas_sensor_enabled", errors);
   const flame = requiredBoolean(body.flame_sensor_enabled, "flame_sensor_enabled", errors);
-  const temp = requiredBoolean(body.temp_sensor_enabled, "temp_sensor_enabled", errors);
-  const humidity = requiredBoolean(body.humidity_sensor_enabled, "humidity_sensor_enabled", errors);
   const localAlarm = requiredBoolean(body.local_alarm_enabled, "local_alarm_enabled", errors);
   const active = requiredBoolean(body.is_active, "is_active", errors);
 
@@ -49,8 +47,6 @@ export async function POST(request: NextRequest) {
     !location ||
     gas === null ||
     flame === null ||
-    temp === null ||
-    humidity === null ||
     localAlarm === null ||
     active === null
   ) {
@@ -67,8 +63,6 @@ export async function POST(request: NextRequest) {
       wifi_ssid: optionalString(body.wifi_ssid) ?? null,
       gas_sensor_enabled: gas,
       flame_sensor_enabled: flame,
-      temp_sensor_enabled: temp,
-      humidity_sensor_enabled: humidity,
       local_alarm_enabled: localAlarm,
       is_active: active,
     },

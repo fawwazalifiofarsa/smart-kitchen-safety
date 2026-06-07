@@ -50,9 +50,8 @@ export default function LoginPage() {
               Smart dashboard for live kitchen gas leak and fire monitoring.
             </h1>
             <p className="max-w-xl text-base leading-7 text-sky-100/82">
-              Pantau kebocoran gas, deteksi api, suhu, kelembaban, status
-              perangkat, alert, notification log, dan pengaturan ambang batas
-              dalam satu dashboard.
+              Pantau kebocoran gas, deteksi api, status perangkat, alert,
+              notification log, dan pengaturan ambang batas dalam satu dashboard.
             </p>
           </div>
         </section>

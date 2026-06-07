@@ -45,9 +45,6 @@ export async function PATCH(request: NextRequest, context: Params) {
       is_active: optionalBoolean(body.is_active) ?? undefined,
       gas_sensor_enabled: optionalBoolean(body.gas_sensor_enabled) ?? undefined,
       flame_sensor_enabled: optionalBoolean(body.flame_sensor_enabled) ?? undefined,
-      temp_sensor_enabled: optionalBoolean(body.temp_sensor_enabled) ?? undefined,
-      humidity_sensor_enabled:
-        optionalBoolean(body.humidity_sensor_enabled) ?? undefined,
       local_alarm_enabled: optionalBoolean(body.local_alarm_enabled) ?? undefined,
       battery_level: optionalNumber(body.battery_level),
       maintenance_due_at: optionalString(body.maintenance_due_at),

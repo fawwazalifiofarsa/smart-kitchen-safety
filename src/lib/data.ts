@@ -25,8 +25,6 @@ import type {
 const DEFAULT_SYSTEM_SETTINGS: Omit<SystemSettings, "updated_at" | "updated_by"> = {
   gas_threshold_warning: 100,
   gas_threshold_danger: 300,
-  temperature_threshold_warning: 50,
-  temperature_threshold_danger: 70,
   offline_timeout_seconds: 60,
   telegram_enabled: false,
   telegram_bot_token_ref: null,
@@ -97,14 +95,6 @@ function mapSystemSettings(rawInput: unknown): SystemSettings {
       typeof raw.gas_threshold_danger === "number"
         ? raw.gas_threshold_danger
         : DEFAULT_SYSTEM_SETTINGS.gas_threshold_danger,
-    temperature_threshold_warning:
-      typeof raw.temperature_threshold_warning === "number"
-        ? raw.temperature_threshold_warning
-        : DEFAULT_SYSTEM_SETTINGS.temperature_threshold_warning,
-    temperature_threshold_danger:
-      typeof raw.temperature_threshold_danger === "number"
-        ? raw.temperature_threshold_danger
-        : DEFAULT_SYSTEM_SETTINGS.temperature_threshold_danger,
     offline_timeout_seconds:
       typeof raw.offline_timeout_seconds === "number"
         ? raw.offline_timeout_seconds
@@ -144,17 +134,15 @@ function mapAlertDoc(id: string, rawInput: unknown): Alert {
     trigger_values: {
       gas_ppm:
         typeof triggerValues.gas_ppm === "number" ? triggerValues.gas_ppm : null,
-      temperature_c:
-        typeof triggerValues.temperature_c === "number"
-          ? triggerValues.temperature_c
-          : null,
+      flame_raw:
+        typeof triggerValues.flame_raw === "number" ? triggerValues.flame_raw : null,
       flame_detected:
         typeof triggerValues.flame_detected === "boolean"
           ? triggerValues.flame_detected
           : null,
-      humidity_pct:
-        typeof triggerValues.humidity_pct === "number"
-          ? triggerValues.humidity_pct
+      detection_status:
+        typeof triggerValues.detection_status === "string"
+          ? triggerValues.detection_status
           : null,
     },
     status: typeof raw.status === "string" ? raw.status : "active",
@@ -208,8 +196,6 @@ function baseMapDevice(id: string, rawInput: unknown): Device {
     is_active: raw.is_active === false ? false : true,
     gas_sensor_enabled: raw.gas_sensor_enabled === false ? false : true,
     flame_sensor_enabled: raw.flame_sensor_enabled === false ? false : true,
-    temp_sensor_enabled: raw.temp_sensor_enabled === false ? false : true,
-    humidity_sensor_enabled: raw.humidity_sensor_enabled === false ? false : true,
     last_alert_at: serializeTimestamp(raw.last_alert_at),
     battery_level:
       typeof raw.battery_level === "number" ? raw.battery_level : null,
@@ -225,16 +211,18 @@ function mapReadingDoc(id: string, rawInput: unknown): SensorReading {
   return {
     reading_id: id,
     device_id: typeof raw.device_id === "string" ? raw.device_id : "",
-    temperature_c:
-      typeof raw.temperature_c === "number" ? raw.temperature_c : 0,
-    humidity_pct: typeof raw.humidity_pct === "number" ? raw.humidity_pct : 0,
     gas_ppm: typeof raw.gas_ppm === "number" ? raw.gas_ppm : 0,
-    smoke_pct: typeof raw.smoke_pct === "number" ? raw.smoke_pct : null,
+    flame_raw: typeof raw.flame_raw === "number" ? raw.flame_raw : null,
     flame_detected: raw.flame_detected === true,
+    flame_message:
+      typeof raw.flame_message === "string" ? raw.flame_message : null,
+    detection_status:
+      typeof raw.detection_status === "string" ? raw.detection_status : null,
     buzzer_active:
       typeof raw.buzzer_active === "boolean" ? raw.buzzer_active : null,
     safe_status: typeof raw.safe_status === "string" ? raw.safe_status : "safe",
     source: typeof raw.source === "string" ? raw.source : "device",
+    esp_millis: typeof raw.esp_millis === "number" ? raw.esp_millis : null,
     recorded_at: serializeTimestamp(raw.recorded_at),
   };
 }
@@ -620,11 +608,9 @@ async function writeStatusLog(
 
 function alertTypeFromReading(reading: {
   flame_detected: boolean;
-  gas_ppm: number;
 }) {
   if (reading.flame_detected) return "fire_detected";
-  if (reading.gas_ppm > 0) return "gas_leak";
-  return "high_temperature";
+  return "gas_leak";
 }
 
 function severityFromSafeStatus(status: string): AlertSeverity {
@@ -636,10 +622,10 @@ function severityFromSafeStatus(status: string): AlertSeverity {
 async function ensureAlertForReading(
   device: Device,
   reading: {
-    temperature_c: number;
-    humidity_pct: number;
     gas_ppm: number;
+    flame_raw?: number | null;
     flame_detected: boolean;
+    detection_status?: string | null;
   },
   safeStatus: string,
 ) {
@@ -675,15 +661,13 @@ async function ensureAlertForReading(
     title:
       type === "fire_detected"
         ? "Api terdeteksi"
-        : type === "gas_leak"
-          ? "Kebocoran gas terdeteksi"
-          : "Suhu tinggi terdeteksi",
+        : "Kebocoran gas terdeteksi",
     message: `${device.name} memicu status ${safeStatus}.`,
     trigger_values: {
       gas_ppm: reading.gas_ppm,
-      temperature_c: reading.temperature_c,
+      flame_raw: reading.flame_raw ?? null,
       flame_detected: reading.flame_detected,
-      humidity_pct: reading.humidity_pct,
+      detection_status: reading.detection_status ?? null,
     },
     status: "active",
     telegram_sent: false,
@@ -700,30 +684,64 @@ async function ensureAlertForReading(
 
 function computeSafeStatus(
   reading: {
-    temperature_c: number;
-    humidity_pct: number;
     gas_ppm: number;
-    smoke_pct?: number | null;
     flame_detected: boolean;
   },
   settings: SystemSettings,
 ) {
   if (
     reading.flame_detected ||
-    reading.gas_ppm >= settings.gas_threshold_danger ||
-    reading.temperature_c >= settings.temperature_threshold_danger
+    reading.gas_ppm >= settings.gas_threshold_danger
   ) {
     return "danger";
   }
 
-  if (
-    reading.gas_ppm >= settings.gas_threshold_warning ||
-    reading.temperature_c >= settings.temperature_threshold_warning
-  ) {
+  if (reading.gas_ppm >= settings.gas_threshold_warning) {
     return "warning";
   }
 
   return "safe";
+}
+
+async function ensureDeviceForIngestion(
+  deviceId: string,
+  payload: {
+    device_name?: string | null;
+    location?: string | null;
+    room?: string | null;
+  },
+) {
+  const deviceRef = adminDb.collection("devices").doc(deviceId);
+  const snapshot = await deviceRef.get();
+
+  if (!snapshot.exists) {
+    await deviceRef.set({
+      device_id: deviceId,
+      name: payload.device_name || `Device ${deviceId}`,
+      location: payload.location || "Unassigned",
+      room: payload.room ?? null,
+      status: "online",
+      firmware_version: null,
+      ip_address: null,
+      wifi_ssid: null,
+      last_seen_at: null,
+      installed_at: null,
+      is_active: true,
+      gas_sensor_enabled: true,
+      flame_sensor_enabled: true,
+      last_alert_at: null,
+      battery_level: null,
+      local_alarm_enabled: true,
+      maintenance_due_at: null,
+      created_at: timestampNow(),
+      updated_at: timestampNow(),
+    });
+
+    const created = await deviceRef.get();
+    return baseMapDevice(created.id, created.data());
+  }
+
+  return baseMapDevice(snapshot.id, snapshot.data());
 }
 
 
@@ -749,18 +767,21 @@ export async function updateSystemSettings(
 export async function ingestReading(
   deviceId: string,
   payload: {
-    temperature_c: number;
-    humidity_pct: number;
     gas_ppm: number;
-    smoke_pct?: number | null;
+    flame_raw?: number | null;
     flame_detected: boolean;
+    flame_message?: string | null;
+    detection_status?: string | null;
+    esp_millis?: number | null;
     buzzer_active?: boolean | null;
-    source: string;
+    source?: string;
     recorded_at?: string;
+    device_name?: string | null;
+    location?: string | null;
+    room?: string | null;
   },
 ) {
-  const device = await getDeviceById(deviceId);
-  if (!device) return null;
+  const device = await ensureDeviceForIngestion(deviceId, payload);
 
   const settings = await getSystemSettings();
   const safeStatus = computeSafeStatus(payload, settings);
@@ -776,14 +797,15 @@ export async function ingestReading(
     .doc(readingId)
     .set({
       device_id: deviceId,
-      temperature_c: payload.temperature_c,
-      humidity_pct: payload.humidity_pct,
       gas_ppm: payload.gas_ppm,
-      smoke_pct: payload.smoke_pct ?? null,
+      flame_raw: payload.flame_raw ?? null,
       flame_detected: payload.flame_detected,
+      flame_message: payload.flame_message ?? null,
+      detection_status: payload.detection_status ?? null,
       buzzer_active: payload.buzzer_active ?? null,
+      esp_millis: payload.esp_millis ?? null,
       safe_status: safeStatus,
-      source: payload.source,
+      source: payload.source ?? "device",
       recorded_at: recordedAt,
     });
 
@@ -914,11 +936,11 @@ export async function getDashboardOverview() {
       return {
         device_id: device.device_id,
         name: device.name,
-        temperature_c: latest.temperature_c,
-        humidity_pct: latest.humidity_pct,
         gas_ppm: latest.gas_ppm,
-        smoke_pct: latest.smoke_pct,
+        flame_raw: latest.flame_raw,
         flame_detected: latest.flame_detected,
+        flame_message: latest.flame_message,
+        detection_status: latest.detection_status,
         safe_status: latest.safe_status,
         recorded_at: latest.recorded_at,
       };
@@ -981,25 +1003,19 @@ export async function getDashboardCharts(filters: {
     .map(([time, readings]) => {
       const sum = readings.reduce(
         (acc, reading) => ({
-          temperature_c: acc.temperature_c + reading.temperature_c,
-          humidity_pct: acc.humidity_pct + reading.humidity_pct,
           gas_ppm: acc.gas_ppm + reading.gas_ppm,
-          smoke_pct: acc.smoke_pct + (reading.smoke_pct ?? 0),
+          flame_raw: acc.flame_raw + (reading.flame_raw ?? 0),
         }),
         {
-          temperature_c: 0,
-          humidity_pct: 0,
           gas_ppm: 0,
-          smoke_pct: 0,
+          flame_raw: 0,
         },
       );
       const count = readings.length || 1;
       return {
         time,
-        temperature_c: Number((sum.temperature_c / count).toFixed(2)),
-        humidity_pct: Number((sum.humidity_pct / count).toFixed(2)),
         gas_ppm: Number((sum.gas_ppm / count).toFixed(2)),
-        smoke_pct: Number((sum.smoke_pct / count).toFixed(2)),
+        flame_raw: Number((sum.flame_raw / count).toFixed(2)),
       };
     });
 }
@@ -1037,4 +1053,37 @@ export async function getAuditLogs(filters: {
     metadata: ensureRecord(doc.data().metadata),
     created_at: serializeTimestamp(doc.data().created_at),
   }));
+
+}
+export async function getNotificationLogs(filters: {
+  status?: string | null;
+  alertId?: string | null;
+}) {
+  let query: FirebaseFirestore.Query = adminDb.collection("notification_logs");
+  if (filters.status) query = query.where("status", "==", filters.status);
+  if (filters.alertId) query = query.where("alert_id", "==", filters.alertId);
+  const snapshot = await query.orderBy("created_at", "desc").get();
+  return snapshot.docs.map((doc) => mapNotificationLogDoc(doc.id, doc.data()));
+}
+
+function mapNotificationLogDoc(id: string, rawInput: unknown): NotificationLog {
+  const raw = ensureRecord(rawInput);
+  const providerResponse = raw.provider_response;
+
+  return {
+    log_id: id,
+    alert_id: typeof raw.alert_id === "string" ? raw.alert_id : "",
+    device_id: typeof raw.device_id === "string" ? raw.device_id : "",
+    channel: typeof raw.channel === "string" ? raw.channel : "telegram",
+    recipient: typeof raw.recipient === "string" ? raw.recipient : "",
+    message: typeof raw.message === "string" ? raw.message : "",
+    status: typeof raw.status === "string" ? raw.status : "pending",
+    provider_response:
+      typeof providerResponse === "string" ||
+        (typeof providerResponse === "object" && providerResponse !== null)
+        ? (providerResponse as NotificationLog["provider_response"])
+        : null,
+    sent_at: serializeTimestamp(raw.sent_at),
+    created_at: serializeTimestamp(raw.created_at),
+  };
 }

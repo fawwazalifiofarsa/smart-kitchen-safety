@@ -84,10 +84,8 @@ export default function MonitoringPage() {
         <LineChart
           points={charts.data ?? []}
           series={[
-            { key: "temperature_c", label: "Temperature", color: "#dc2626" },
             { key: "gas_ppm", label: "Gas", color: "#2563eb" },
-            { key: "humidity_pct", label: "Humidity", color: "#0f766e" },
-            { key: "smoke_pct", label: "Smoke", color: "#7c3aed" },
+            { key: "flame_raw", label: "Flame Raw", color: "#dc2626" },
           ]}
           title="Sensor History Chart"
         />
@@ -103,10 +101,9 @@ export default function MonitoringPage() {
             <thead className="bg-[var(--color-surface-muted)] text-[var(--color-muted)]">
               <tr>
                 <th className="px-4 py-3 font-semibold">Recorded</th>
-                <th className="px-4 py-3 font-semibold">Temperature</th>
-                <th className="px-4 py-3 font-semibold">Humidity</th>
                 <th className="px-4 py-3 font-semibold">Gas</th>
-                <th className="px-4 py-3 font-semibold">Smoke</th>
+                <th className="px-4 py-3 font-semibold">Flame Raw</th>
+                <th className="px-4 py-3 font-semibold">Flame</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
               </tr>
             </thead>
@@ -114,10 +111,11 @@ export default function MonitoringPage() {
               {(readings.data ?? []).map((reading) => (
                 <tr className="border-t border-[var(--color-border)]" key={reading.reading_id}>
                   <td className="px-4 py-3">{formatDateTime(reading.recorded_at)}</td>
-                  <td className="px-4 py-3">{formatMetric(reading.temperature_c, "°C")}</td>
-                  <td className="px-4 py-3">{formatMetric(reading.humidity_pct, "%")}</td>
                   <td className="px-4 py-3">{formatMetric(reading.gas_ppm, "ppm")}</td>
-                  <td className="px-4 py-3">{formatMetric(reading.smoke_pct, "%")}</td>
+                  <td className="px-4 py-3">{formatMetric(reading.flame_raw, "")}</td>
+                  <td className="px-4 py-3">
+                    {reading.flame_message ?? (reading.flame_detected ? "Detected" : "Clear")}
+                  </td>
                   <td className="px-4 py-3">{reading.safe_status}</td>
                 </tr>
               ))}

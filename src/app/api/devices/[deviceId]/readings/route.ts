@@ -9,17 +9,30 @@ import {
   readJsonBody,
   successResponse,
 } from "@/lib/utils/http";
-import { optionalString, requiredBoolean, requiredNumber, requiredString } from "@/lib/utils/validation";
+import {
+  optionalNumber,
+  optionalString,
+  requiredBoolean,
+  requiredNumber,
+} from "@/lib/utils/validation";
 
 type Params = {
   params: Promise<{ deviceId: string }>;
 };
 
-export async function GET(request: NextRequest, context: Params) {
-  const actor = await getRequestUser(request);
-  if (!actor) return errorResponse("Unauthorized", { status: 401 });
+async function canReadDeviceSensorData(request: NextRequest, deviceId: string) {
+  const deviceKey = request.headers.get("x-device-key");
+  if (verifyDeviceKey(deviceId, deviceKey)) return true;
 
+  return Boolean(await getRequestUser(request));
+}
+
+export async function GET(request: NextRequest, context: Params) {
   const { deviceId } = await context.params;
+  if (!(await canReadDeviceSensorData(request, deviceId))) {
+    return errorResponse("Unauthorized", { status: 401 });
+  }
+
   const { searchParams } = request.nextUrl;
   const data = await getReadings(deviceId, {
     startDate: searchParams.get("start_date"),
@@ -33,6 +46,13 @@ export async function GET(request: NextRequest, context: Params) {
 export async function POST(request: NextRequest, context: Params) {
   const { deviceId } = await context.params;
   const deviceKey = request.headers.get("x-device-key");
+  console.log("[sensor-ingest]", {
+    method: request.method,
+    deviceId,
+    hasDeviceKey: Boolean(deviceKey),
+    espDevice: request.headers.get("x-esp-device") ?? null,
+  });
+
   if (!verifyDeviceKey(deviceId, deviceKey)) {
     return errorResponse("x-device-key tidak valid", { status: 401 });
   }
@@ -41,36 +61,53 @@ export async function POST(request: NextRequest, context: Params) {
   if (!body) return errorResponse("Body request tidak valid");
 
   const errors: Array<{ field: string; message: string }> = [];
-  const temperature = requiredNumber(body.temperature_c, "temperature_c", errors);
-  const humidity = requiredNumber(body.humidity_pct, "humidity_pct", errors);
-  const gas = requiredNumber(body.gas_ppm, "gas_ppm", errors);
-  const flame = requiredBoolean(body.flame_detected, "flame_detected", errors);
-  const source = requiredString(body.source, "source", errors);
+  const bodyDeviceId = optionalString(body.device_id);
+  if (bodyDeviceId && bodyDeviceId !== deviceId) {
+    errors.push({
+      field: "device_id",
+      message: "device_id tidak sesuai dengan path perangkat",
+    });
+  }
 
+  const gas = requiredNumber(body.gas_ppm ?? body.gas, "gas_ppm", errors);
+  const flame = requiredBoolean(body.flame_detected, "flame_detected", errors);
+  const flameRaw = optionalNumber(body.flame_raw);
+  const espMillis = optionalNumber(body.esp_millis);
   if (
-    errors.length > 0 ||
-    temperature === null ||
-    humidity === null ||
-    gas === null ||
-    flame === null ||
-    !source
+    body.flame_raw !== undefined &&
+    body.flame_raw !== null &&
+    flameRaw === undefined
   ) {
+    errors.push({ field: "flame_raw", message: "flame raw harus berupa angka" });
+  }
+  if (
+    body.esp_millis !== undefined &&
+    body.esp_millis !== null &&
+    espMillis === undefined
+  ) {
+    errors.push({ field: "esp_millis", message: "esp millis harus berupa angka" });
+  }
+
+  if (errors.length > 0 || gas === null || flame === null) {
     return errorResponse("Validasi gagal", { errors });
   }
 
   const saved = await ingestReading(deviceId, {
-    temperature_c: temperature,
-    humidity_pct: humidity,
     gas_ppm: gas,
-    smoke_pct: typeof body.smoke_pct === "number" ? body.smoke_pct : null,
+    flame_raw: flameRaw ?? null,
     flame_detected: flame,
+    flame_message: optionalString(body.flame_message) ?? null,
+    detection_status: optionalString(body.detection_status) ?? null,
+    esp_millis: espMillis ?? null,
     buzzer_active:
       typeof body.buzzer_active === "boolean" ? body.buzzer_active : null,
-    source,
+    source: optionalString(body.source) ?? "esp8266",
     recorded_at: optionalString(body.recorded_at) ?? undefined,
+    device_name: optionalString(body.device_name) ?? null,
+    location: optionalString(body.location) ?? null,
+    room: optionalString(body.room) ?? null,
   });
 
-  if (!saved) return errorResponse("Perangkat tidak ditemukan", { status: 404 });
   return successResponse(saved, {
     status: 201,
     message: "Data sensor berhasil disimpan",

@@ -101,7 +101,7 @@ void loop()
 
     // Status sistem
 
-    if (!flameDetected && nilaiMQ2 < 250)
+    if (!flameDetected && nilaiMQ2 < 150)
     {
         statusMsg = "AMAN";
     }

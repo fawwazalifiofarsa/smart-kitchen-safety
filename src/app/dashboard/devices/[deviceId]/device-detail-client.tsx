@@ -18,7 +18,7 @@ export function DeviceDetailClient({ deviceId }: { deviceId: string }) {
   const device = useApiData<Device>(`/api/devices/${deviceId}`);
   const latest = useApiData<SensorReading>(`/api/devices/${deviceId}/readings/latest`);
   const readings = useApiData<SensorReading[]>(`/api/devices/${deviceId}/readings?limit=20`);
-  const charts = useApiData<ChartPoint[]>(`/api/dashboard/charts?device_id=${deviceId}&interval=hour`);
+  const charts = useApiData<ChartPoint[]>(`/api/dashboard/charts?device_id=${deviceId}&interval=minute`);
   const statusLogs = useApiData<DeviceStatusLog[]>(
     `/api/devices/${deviceId}/status-logs?limit=20`,
   );

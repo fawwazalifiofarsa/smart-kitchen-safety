@@ -33,6 +33,10 @@ export function LineChart({
   const maxValue = values.length > 0 ? Math.max(...values) : 1;
   const minValue = values.length > 0 ? Math.min(...values) : 0;
   const range = maxValue - minValue || 1;
+  const getX = (index: number) =>
+    padding + ((width - padding * 2) / Math.max(points.length - 1, 1)) * index;
+  const getY = (value: number) =>
+    height - padding - ((value - minValue) / range) * (height - padding * 2);
 
   return (
     <Card className="space-y-4">
@@ -74,42 +78,52 @@ export function LineChart({
           })}
           {series.map((item) => {
             const polyline = points
-              .map((point, index) => {
-                const x =
-                  padding +
-                  ((width - padding * 2) / Math.max(points.length - 1, 1)) * index;
-                const value = point[item.key] ?? minValue;
-                const y =
-                  height -
-                  padding -
-                  ((value - minValue) / range) * (height - padding * 2);
-                return `${x},${y}`;
+              .flatMap((point, index) => {
+                const value = point[item.key];
+                if (value === null) return [];
+                return `${getX(index)},${getY(value)}`;
               })
               .join(" ");
 
             return (
-              <polyline
-                key={item.key}
-                fill="none"
-                points={polyline}
-                stroke={item.color}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="3"
-              />
+              <g key={item.key}>
+                {polyline ? (
+                  <polyline
+                    fill="none"
+                    points={polyline}
+                    stroke={item.color}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="3"
+                  />
+                ) : null}
+                {points.map((point, index) => {
+                  const value = point[item.key];
+                  if (value === null) return null;
+
+                  return (
+                    <circle
+                      cx={getX(index)}
+                      cy={getY(value)}
+                      fill="#ffffff"
+                      key={`${item.key}-${point.time}`}
+                      r="4"
+                      stroke={item.color}
+                      strokeWidth="2"
+                    />
+                  );
+                })}
+              </g>
             );
           })}
           {points.map((point, index) => {
-            const x =
-              padding +
-              ((width - padding * 2) / Math.max(points.length - 1, 1)) * index;
             return (
               <text
                 key={point.time}
                 fill="#64748b"
                 fontSize="11"
                 textAnchor="middle"
-                x={x}
+                x={getX(index)}
                 y={height - 6}
               >
                 {formatCompactDate(point.time)}

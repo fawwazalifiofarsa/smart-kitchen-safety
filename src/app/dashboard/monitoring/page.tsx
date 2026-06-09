@@ -22,7 +22,7 @@ export default function MonitoringPage() {
   const selectedDeviceId = deviceId || devices.data?.[0]?.device_id || "";
 
   const query = selectedDeviceId
-    ? `device_id=${selectedDeviceId}&interval=hour${
+    ? `device_id=${selectedDeviceId}&interval=minute${
         startDate ? `&start_date=${encodeURIComponent(fromDateTimeInputValue(startDate) ?? "")}` : ""
       }${endDate ? `&end_date=${encodeURIComponent(fromDateTimeInputValue(endDate) ?? "")}` : ""}`
     : "";

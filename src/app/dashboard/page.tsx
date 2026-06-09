@@ -14,7 +14,7 @@ import { formatDateTime, formatMetric } from "@/lib/utils/format";
 export default function DashboardOverviewPage() {
   const realtimeSummary = useDashboardOverview();
   const overview = useApiData<DashboardOverview>("/api/dashboard/overview");
-  const charts = useApiData<ChartPoint[]>("/api/dashboard/charts?interval=hour");
+  const charts = useApiData<ChartPoint[]>("/api/dashboard/charts?interval=minute");
   const alerts = useApiData<Alert[]>("/api/alerts?status=active");
 
   if (realtimeSummary.loading || overview.loading || charts.loading || alerts.loading) {

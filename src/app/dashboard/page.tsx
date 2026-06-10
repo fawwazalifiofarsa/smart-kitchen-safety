@@ -14,7 +14,7 @@ import { formatDateTime, formatMetric } from "@/lib/utils/format";
 export default function DashboardOverviewPage() {
   const realtimeSummary = useDashboardOverview();
   const overview = useApiData<DashboardOverview>("/api/dashboard/overview");
-  const charts = useApiData<ChartPoint[]>("/api/dashboard/charts?interval=hour");
+  const charts = useApiData<ChartPoint[]>("/api/dashboard/charts?interval=minute");
   const alerts = useApiData<Alert[]>("/api/alerts?status=active");
 
   if (realtimeSummary.loading || overview.loading || charts.loading || alerts.loading) {
@@ -99,7 +99,7 @@ export default function DashboardOverviewPage() {
       </section>
 
       <LineChart
-        points={charts.data ?? []}
+        points={(charts.data ?? []).slice(-12)}
         series={[
           { key: "gas_ppm", label: "Gas", color: "#2563eb" },
           { key: "flame_raw", label: "Flame Raw", color: "#dc2626" },

@@ -292,4 +292,19 @@ describe("data.ts service layer", () => {
     const chart = await getDashboardCharts({ deviceId: "dev_1", interval: "hour" });
     expect(chart).toEqual([{ time: expect.any(String), gas_ppm: 150, flame_raw: 2 }]);
   });
+
+  it("getDashboardCharts mendukung bucket menit dan tidak mengubah flame_raw kosong menjadi 0", async () => {
+    const { getDashboardCharts } = await import("@/lib/data");
+    dbMocks.queryGet.mockResolvedValueOnce(querySnapshot([
+      { id: "r1", data: { device_id: "dev_1", gas_ppm: 40, flame_raw: null, recorded_at: new TimestampMock(new Date("2026-01-01T10:15:05Z")) } },
+      { id: "r2", data: { device_id: "dev_1", gas_ppm: 50, flame_raw: null, recorded_at: new TimestampMock(new Date("2026-01-01T10:15:45Z")) } },
+      { id: "r3", data: { device_id: "dev_1", gas_ppm: 60, flame_raw: 1, recorded_at: new TimestampMock(new Date("2026-01-01T10:16:05Z")) } },
+    ]));
+
+    const chart = await getDashboardCharts({ deviceId: "dev_1", interval: "minute" });
+    expect(chart).toEqual([
+      { time: "2026-01-01T10:15:00.000Z", gas_ppm: 45, flame_raw: null },
+      { time: "2026-01-01T10:16:00.000Z", gas_ppm: 60, flame_raw: 1 },
+    ]);
+  });
 });

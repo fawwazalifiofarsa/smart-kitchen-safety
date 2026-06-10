@@ -38,7 +38,18 @@ type UseApiDataOptions = {
   enabled?: boolean;
 };
 
-export function useApiData<T>(url: string, options?: UseApiDataOptions) {
+type UseApiDataReturn<T> = {
+  data: T | null;
+  error: string | null;
+  loading: boolean;
+  reload: (silent?: boolean) => void;
+  setData: React.Dispatch<React.SetStateAction<T | null>>;
+};
+
+export function useApiData<T>(
+  url: string,
+  options?: UseApiDataOptions,
+): UseApiDataReturn<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,31 +57,38 @@ export function useApiData<T>(url: string, options?: UseApiDataOptions) {
 
   const enabled = options?.enabled ?? true;
 
-  const load = useEffectEvent(async () => {
-    if (!enabled) {
+  const load = useEffectEvent(async (silent = false) => {
+    if (!enabled || !url) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
+
     setError(null);
 
     try {
       const nextData = await fetchJson<T>(url, {
         cache: "no-store",
       });
+
       setData(nextData);
     } catch (nextError) {
       const message =
         nextError instanceof Error ? nextError.message : "Request gagal";
+
       setError(message);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   });
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, [nonce, url, enabled]);
 
   const api = useMemo(
@@ -78,14 +96,19 @@ export function useApiData<T>(url: string, options?: UseApiDataOptions) {
       data,
       error,
       loading,
-      reload() {
+      reload(silent = false) {
+        if (silent) {
+          void load(true);
+          return;
+        }
+
         startTransition(() => {
           setNonce((current) => current + 1);
         });
       },
       setData,
     }),
-    [data, error, loading],
+    [data, error, loading, load],
   );
 
   return api;

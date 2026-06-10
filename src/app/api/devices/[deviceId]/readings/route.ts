@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 
-import { getReadings, ingestReading, verifyDeviceKey } from "@/lib/data";
+import { createAlert, getReadings, getSystemSettings, ingestReading, sendTelegramAlert, verifyDeviceKey } from "@/lib/data";
 import { getRequestUser } from "@/lib/firebase/auth";
-import type { CreateReadingRequestBody } from "@/lib/types";
+import type { AuthenticatedUser, CreateReadingRequestBody } from "@/lib/types";
 import {
   errorResponse,
   parsePositiveLimit,
@@ -18,6 +18,15 @@ import {
 
 type Params = {
   params: Promise<{ deviceId: string }>;
+};
+
+const systemActor: AuthenticatedUser = {
+  uid: "system",
+  name: "System",
+  email: "system@smart-kitchen.local",
+  role: "admin",
+  status: "active",
+  telegram_chat_id: null,
 };
 
 async function canReadDeviceSensorData(request: NextRequest, deviceId: string) {
@@ -107,6 +116,50 @@ export async function POST(request: NextRequest, context: Params) {
     location: optionalString(body.location) ?? null,
     room: optionalString(body.room) ?? null,
   });
+
+  const settings = await getSystemSettings();
+
+  const isDanger =
+    saved.safe_status === "danger" ||
+    gas >= settings.gas_threshold_danger ||
+    flame === true;
+
+  if (isDanger && settings.telegram_enabled) {
+    const systemActor: AuthenticatedUser = {
+      uid: "system",
+      name: "System",
+      email: "system@smart-kitchen.local",
+      role: "admin",
+      status: "active",
+      telegram_chat_id: null,
+    };
+
+    const alertId = await createAlert(
+      {
+        device_id: deviceId,
+        type: flame ? "fire" : "gas_leak",
+        title: "Danger Detected",
+        message: `Gas terdeteksi ${gas} ppm. Flame: ${flame ? "Detected" : "Clear"
+          }. Status: ${saved.safe_status}`,
+        severity: "critical",
+        trigger_values: {
+          gas_ppm: gas,
+          flame_detected: flame,
+          flame_raw: flameRaw ?? null,
+          detection_status: optionalString(body.detection_status) ?? saved.safe_status,
+        },
+      },
+      systemActor,
+    );
+
+    await sendTelegramAlert(
+      alertId,
+      {
+        recipient_chat_id: settings.default_alert_chat_id ?? "",
+      },
+      systemActor,
+    );
+  }
 
   return successResponse(saved, {
     status: 201,

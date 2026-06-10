@@ -295,8 +295,9 @@ export async function getUserFromAccessToken(
     const decoded = await adminAuth.verifyIdToken(idToken, true);
     const user = await resolveUserProfile(decoded);
     return user?.status === "active" ? user : null;
-  } catch {
-    return null;
+  } catch (error) {
+    console.error("getUserFromAccessToken error:", error);
+    throw error;
   }
 }
 

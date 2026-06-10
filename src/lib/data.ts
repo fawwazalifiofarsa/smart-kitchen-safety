@@ -30,8 +30,9 @@ const DEFAULT_SYSTEM_SETTINGS: Omit<SystemSettings, "updated_at" | "updated_by">
   telegram_bot_token_ref: null,
   default_alert_chat_id: null,
   data_retention_days: 30,
+  temperature_threshold_warning: 0,
+  temperature_threshold_danger: 100,
 };
-
 
 type RecordData = Record<string, unknown>;
 
@@ -117,6 +118,14 @@ function mapSystemSettings(rawInput: unknown): SystemSettings {
         : DEFAULT_SYSTEM_SETTINGS.data_retention_days,
     updated_at: serializeTimestamp(raw.updated_at),
     updated_by: typeof raw.updated_by === "string" ? raw.updated_by : null,
+    temperature_threshold_warning:
+      typeof raw.temperature_threshold_warning === "number"
+        ? raw.temperature_threshold_warning
+        : DEFAULT_SYSTEM_SETTINGS.temperature_threshold_warning,
+    temperature_threshold_danger:
+      typeof raw.temperature_threshold_danger === "number"
+        ? raw.temperature_threshold_danger
+        : DEFAULT_SYSTEM_SETTINGS.temperature_threshold_danger,
   };
 }
 
@@ -562,7 +571,14 @@ export async function sendTelegramAlert(
   });
 
   if (!response.ok) {
-    throw new Error("Pengiriman Telegram gagal");
+    console.error("Telegram provider response:", providerResponse);
+
+    const description =
+      typeof providerResponse?.description === "string"
+        ? providerResponse.description
+        : "Pengiriman Telegram gagal";
+
+    throw new Error(description);
   }
 
   await adminDb.collection("alerts").doc(alertId).set(
@@ -619,6 +635,12 @@ function severityFromSafeStatus(status: string): AlertSeverity {
   return "info";
 }
 
+function alertCreatedAtMs(alert: Alert) {
+  if (!alert.created_at) return 0;
+  const time = new Date(alert.created_at).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
 async function ensureAlertForReading(
   device: Device,
   reading: {
@@ -636,17 +658,16 @@ async function ensureAlertForReading(
   const existingSnapshot = await adminDb
     .collection("alerts")
     .where("device_id", "==", device.device_id)
-    .orderBy("created_at", "desc")
-    .limit(10)
     .get();
 
   const existing = existingSnapshot.docs
     .map((doc) => mapAlertDoc(doc.id, doc.data()))
-    .find(
+    .filter(
       (alert) =>
         alert.type === type &&
         (alert.status === "active" || alert.status === "acknowledged"),
-    );
+    )
+    .sort((left, right) => alertCreatedAtMs(right) - alertCreatedAtMs(left))[0];
 
   if (existing) {
     return existing.alert_id;
@@ -823,7 +844,15 @@ export async function ingestReading(
     await writeStatusLog(deviceId, device.status, nextDeviceStatus, "sensor_ingestion");
   }
 
-  await ensureAlertForReading(device, payload, safeStatus);
+  try {
+    await ensureAlertForReading(device, payload, safeStatus);
+  } catch (error) {
+    console.error("[sensor-ingest] alert creation skipped", {
+      deviceId,
+      readingId,
+      error,
+    });
+  }
 
   return {
     reading_id: readingId,
@@ -963,7 +992,10 @@ export async function getDashboardCharts(filters: {
   endDate?: string | null;
   interval?: string | null;
 }) {
-  const interval = filters.interval === "day" ? "day" : "hour";
+  const interval =
+    filters.interval === "day" || filters.interval === "hour"
+      ? filters.interval
+      : "minute";
   const points: SensorReading[] = [];
 
   if (filters.deviceId) {
@@ -977,22 +1009,35 @@ export async function getDashboardCharts(filters: {
   } else {
     const devices = await getDevices({});
     const readings = await Promise.all(
-      devices.slice(0, 5).map((device) =>
-        getReadings(device.device_id, {
+      devices.map(async (device) => ({
+        device,
+        readings: await getReadings(device.device_id, {
           startDate: filters.startDate,
           endDate: filters.endDate,
           limit: 60,
         }),
-      ),
+      })),
     );
 
-    points.push(...readings.flat());
+    points.push(
+      ...readings
+        .filter((item) => item.readings.length > 0)
+        .sort(
+          (left, right) =>
+            readingRecordedAtMs(right.readings[0]) -
+            readingRecordedAtMs(left.readings[0]),
+        )
+        .slice(0, 5)
+        .flatMap((item) => item.readings),
+    );
   }
 
   const buckets = new Map<string, Array<SensorReading>>();
   points.forEach((point) => {
     if (!point.recorded_at) return;
-    const key = bucketTime(new Date(point.recorded_at), interval);
+    const recordedAt = new Date(point.recorded_at);
+    if (Number.isNaN(recordedAt.getTime())) return;
+    const key = bucketTime(recordedAt, interval);
     const bucket = buckets.get(key) ?? [];
     bucket.push(point);
     buckets.set(key, bucket);
@@ -1001,28 +1046,54 @@ export async function getDashboardCharts(filters: {
   return Array.from(buckets.entries())
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([time, readings]) => {
-      const sum = readings.reduce(
-        (acc, reading) => ({
-          gas_ppm: acc.gas_ppm + reading.gas_ppm,
-          flame_raw: acc.flame_raw + (reading.flame_raw ?? 0),
-        }),
-        {
-          gas_ppm: 0,
-          flame_raw: 0,
-        },
+      const gasReadings = readings.filter((reading) =>
+        Number.isFinite(reading.gas_ppm),
       );
-      const count = readings.length || 1;
+      const flameReadings = readings.filter(
+        (reading) =>
+          reading.flame_raw !== null && Number.isFinite(reading.flame_raw),
+      );
+      const gasSum = gasReadings.reduce(
+        (total, reading) => total + reading.gas_ppm,
+        0,
+      );
+      const flameSum = flameReadings.reduce(
+        (total, reading) => total + (reading.flame_raw ?? 0),
+        0,
+      );
       return {
         time,
-        gas_ppm: Number((sum.gas_ppm / count).toFixed(2)),
-        flame_raw: Number((sum.flame_raw / count).toFixed(2)),
+        gas_ppm:
+          gasReadings.length > 0
+            ? Number((gasSum / gasReadings.length).toFixed(2))
+            : null,
+        flame_raw:
+          flameReadings.length > 0
+            ? Number((flameSum / flameReadings.length).toFixed(2))
+            : null,
       };
     });
+}
+
+function readingRecordedAtMs(reading: SensorReading | undefined) {
+  if (!reading?.recorded_at) return 0;
+  const time = new Date(reading.recorded_at).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function bucketTime(date: Date, interval: string) {
   if (interval === "day") {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString();
+  }
+
+  if (interval === "minute") {
+    return new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      date.getHours(),
+      date.getMinutes(),
+    ).toISOString();
   }
 
   return new Date(

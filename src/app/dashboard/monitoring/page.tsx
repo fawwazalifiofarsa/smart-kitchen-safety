@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { LineChart } from "@/components/dashboard/line-chart";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -22,9 +22,8 @@ export default function MonitoringPage() {
   const selectedDeviceId = deviceId || devices.data?.[0]?.device_id || "";
 
   const query = selectedDeviceId
-    ? `device_id=${selectedDeviceId}&interval=hour${
-        startDate ? `&start_date=${encodeURIComponent(fromDateTimeInputValue(startDate) ?? "")}` : ""
-      }${endDate ? `&end_date=${encodeURIComponent(fromDateTimeInputValue(endDate) ?? "")}` : ""}`
+    ? `device_id=${selectedDeviceId}&interval=minute${startDate ? `&start_date=${encodeURIComponent(fromDateTimeInputValue(startDate) ?? "")}` : ""
+    }${endDate ? `&end_date=${encodeURIComponent(fromDateTimeInputValue(endDate) ?? "")}` : ""}`
     : "";
 
   const charts = useApiData<ChartPoint[]>(
@@ -82,7 +81,7 @@ export default function MonitoringPage() {
         <ErrorState message={charts.error} onRetry={charts.reload} />
       ) : (
         <LineChart
-          points={charts.data ?? []}
+          points={(charts.data ?? []).slice(-10)}
           series={[
             { key: "gas_ppm", label: "Gas", color: "#2563eb" },
             { key: "flame_raw", label: "Flame Raw", color: "#dc2626" },

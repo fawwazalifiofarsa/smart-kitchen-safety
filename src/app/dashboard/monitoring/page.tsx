@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { LineChart } from "@/components/dashboard/line-chart";
 import { PageHeader } from "@/components/dashboard/page-header";

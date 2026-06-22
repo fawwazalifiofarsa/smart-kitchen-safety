@@ -2,11 +2,12 @@
 
 import {
   startTransition,
+  useCallback,
   useEffect,
-  useEffectEvent,
   useMemo,
   useState,
 } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
 import type { ApiErrorResponse, ApiSuccessResponse } from "@/lib/types";
 
@@ -43,7 +44,7 @@ type UseApiDataReturn<T> = {
   error: string | null;
   loading: boolean;
   reload: (silent?: boolean) => void;
-  setData: React.Dispatch<React.SetStateAction<T | null>>;
+  setData: Dispatch<SetStateAction<T | null>>;
 };
 
 export function useApiData<T>(
@@ -57,39 +58,42 @@ export function useApiData<T>(
 
   const enabled = options?.enabled ?? true;
 
-  const load = useEffectEvent(async (silent = false) => {
-    if (!enabled || !url) {
-      setLoading(false);
-      return;
-    }
-
-    if (!silent) {
-      setLoading(true);
-    }
-
-    setError(null);
-
-    try {
-      const nextData = await fetchJson<T>(url, {
-        cache: "no-store",
-      });
-
-      setData(nextData);
-    } catch (nextError) {
-      const message =
-        nextError instanceof Error ? nextError.message : "Request gagal";
-
-      setError(message);
-    } finally {
-      if (!silent) {
+  const load = useCallback(
+    async (silent = false) => {
+      if (!enabled || !url) {
         setLoading(false);
+        return;
       }
-    }
-  });
+
+      if (!silent) {
+        setLoading(true);
+      }
+
+      setError(null);
+
+      try {
+        const nextData = await fetchJson<T>(url, {
+          cache: "no-store",
+        });
+
+        setData(nextData);
+      } catch (nextError) {
+        const message =
+          nextError instanceof Error ? nextError.message : "Request gagal";
+
+        setError(message);
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [enabled, url],
+  );
 
   useEffect(() => {
     void load(false);
-  }, [nonce, url, enabled]);
+  }, [load, nonce]);
 
   const api = useMemo(
     () => ({

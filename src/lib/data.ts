@@ -576,9 +576,13 @@ export async function sendTelegramAlert(
     const description =
       typeof providerResponse?.description === "string"
         ? providerResponse.description
-        : "Pengiriman Telegram gagal";
+        : null;
 
-    throw new Error(description);
+    throw new Error(
+      description
+        ? `Pengiriman Telegram gagal: ${description}`
+        : "Pengiriman Telegram gagal",
+    );
   }
 
   await adminDb.collection("alerts").doc(alertId).set(

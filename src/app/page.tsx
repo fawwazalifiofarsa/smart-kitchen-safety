@@ -3,18 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  collection,
-  collectionGroup,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
-
 import { Card } from "@/components/ui/card";
-import { firebaseClientDb } from "@/lib/firebase/client";
 import { formatDateTime, formatMetric } from "@/lib/utils/format";
 
 type LandingDevice = {
@@ -166,99 +155,143 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribeDevices = onSnapshot(
-      collection(firebaseClientDb, "devices"),
-      (snapshot) => {
-        setDevices(
-          snapshot.docs.map((doc) => {
-            const data = doc.data();
+    let isMounted = true;
+    let unsubscribers: Array<() => void> = [];
 
-            return {
-              device_id: doc.id,
-              name: textValue(data.name, `Device ${doc.id}`),
-              status: textValue(data.status, "unknown"),
-              last_seen_at: data.last_seen_at ?? null,
-            };
-          }),
+    async function subscribeToFirebase() {
+      try {
+        const [{ firebaseClientDb }, firestore] = await Promise.all([
+          import("@/lib/firebase/client"),
+          import("firebase/firestore"),
+        ]);
+
+        const {
+          collection,
+          collectionGroup,
+          limit,
+          onSnapshot,
+          orderBy,
+          query,
+          where,
+        } = firestore;
+
+        const unsubscribeDevices = onSnapshot(
+          collection(firebaseClientDb, "devices"),
+          (snapshot) => {
+            if (!isMounted) return;
+
+            setDevices(
+              snapshot.docs.map((doc) => {
+                const data = doc.data();
+
+                return {
+                  device_id: doc.id,
+                  name: textValue(data.name, `Device ${doc.id}`),
+                  status: textValue(data.status, "unknown"),
+                  last_seen_at: data.last_seen_at ?? null,
+                };
+              }),
+            );
+
+            setError(null);
+          },
+          () => {
+            if (!isMounted) return;
+            setError("Gagal memuat data perangkat dari Firebase.");
+          },
         );
 
-        setError(null);
-      },
-      () => {
-        setError("Gagal memuat data perangkat dari Firebase.");
-      },
-    );
-
-    const activeAlertsQuery = query(
-      collection(firebaseClientDb, "alerts"),
-      where("status", "==", "active"),
-      limit(10),
-    );
-
-    const unsubscribeAlerts = onSnapshot(
-      activeAlertsQuery,
-      (snapshot) => {
-        setAlerts(
-          snapshot.docs.map((doc) => {
-            const data = doc.data();
-
-            return {
-              alert_id: doc.id,
-              title: textValue(data.title, "Active Alert"),
-              severity: textValue(data.severity, "warning"),
-              status: textValue(data.status, "active"),
-            };
-          }),
+        const activeAlertsQuery = query(
+          collection(firebaseClientDb, "alerts"),
+          where("status", "==", "active"),
+          limit(10),
         );
 
-        setError(null);
-      },
-      () => {
-        setError("Gagal memuat data alert dari Firebase.");
-      },
-    );
+        const unsubscribeAlerts = onSnapshot(
+          activeAlertsQuery,
+          (snapshot) => {
+            if (!isMounted) return;
 
-    const latestReadingQuery = query(
-      collectionGroup(firebaseClientDb, "sensor_readings"),
-      orderBy("recorded_at", "desc"),
-      limit(1),
-    );
+            setAlerts(
+              snapshot.docs.map((doc) => {
+                const data = doc.data();
 
-    const unsubscribeLatestReading = onSnapshot(
-      latestReadingQuery,
-      (snapshot) => {
-        const doc = snapshot.docs[0];
+                return {
+                  alert_id: doc.id,
+                  title: textValue(data.title, "Active Alert"),
+                  severity: textValue(data.severity, "warning"),
+                  status: textValue(data.status, "active"),
+                };
+              }),
+            );
 
-        if (!doc) {
-          setLatestReading(null);
-          return;
+            setError(null);
+          },
+          () => {
+            if (!isMounted) return;
+            setError("Gagal memuat data alert dari Firebase.");
+          },
+        );
+
+        const latestReadingQuery = query(
+          collectionGroup(firebaseClientDb, "sensor_readings"),
+          orderBy("recorded_at", "desc"),
+          limit(1),
+        );
+
+        const unsubscribeLatestReading = onSnapshot(
+          latestReadingQuery,
+          (snapshot) => {
+            if (!isMounted) return;
+
+            const doc = snapshot.docs[0];
+
+            if (!doc) {
+              setLatestReading(null);
+              return;
+            }
+
+            const data = doc.data();
+
+            setLatestReading({
+              reading_id: doc.id,
+              device_id: textValue(data.device_id),
+              gas_ppm: numberValue(data.gas_ppm),
+              flame_raw: numberValue(data.flame_raw),
+              flame_detected: booleanValue(data.flame_detected),
+              flame_message:
+                typeof data.flame_message === "string" ? data.flame_message : null,
+              safe_status: textValue(data.safe_status, "normal"),
+              recorded_at: data.recorded_at ?? null,
+            });
+
+            setError(null);
+          },
+          () => {
+            if (!isMounted) return;
+            setError("Gagal memuat pembacaan sensor terbaru dari Firebase.");
+          },
+        );
+
+        unsubscribers = [
+          unsubscribeDevices,
+          unsubscribeAlerts,
+          unsubscribeLatestReading,
+        ];
+      } catch (firebaseError) {
+        console.error("Landing Firebase init failed:", firebaseError);
+
+        if (isMounted) {
+          setError("Firebase belum siap atau konfigurasi client belum tersedia.");
         }
+      }
+    }
 
-        const data = doc.data();
-
-        setLatestReading({
-          reading_id: doc.id,
-          device_id: textValue(data.device_id),
-          gas_ppm: numberValue(data.gas_ppm),
-          flame_raw: numberValue(data.flame_raw),
-          flame_detected: booleanValue(data.flame_detected),
-          flame_message:
-            typeof data.flame_message === "string" ? data.flame_message : null,
-          safe_status: textValue(data.safe_status, "normal"),
-          recorded_at: data.recorded_at ?? null,
-        });
-
-        setError(null);
-      },
-      () => {
-        setError("Gagal memuat pembacaan sensor terbaru dari Firebase.");
-      },
-    );
+    void subscribeToFirebase();
 
     return () => {
-      unsubscribeDevices();
-      unsubscribeAlerts();
-      unsubscribeLatestReading();
+      isMounted = false;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, []);
 

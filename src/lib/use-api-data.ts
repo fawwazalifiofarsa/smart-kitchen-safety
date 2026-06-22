@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
 import type { ApiErrorResponse, ApiSuccessResponse } from "@/lib/types";
 
@@ -43,7 +44,7 @@ type UseApiDataReturn<T> = {
   error: string | null;
   loading: boolean;
   reload: (silent?: boolean) => void;
-  setData: React.Dispatch<React.SetStateAction<T | null>>;
+  setData: Dispatch<SetStateAction<T | null>>;
 };
 
 export function useApiData<T>(

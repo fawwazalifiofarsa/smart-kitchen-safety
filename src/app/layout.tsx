@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import "./globals.css";
+import { PageTransition } from "@/components/layout/page-transition";
 
 export const metadata: Metadata = {
   title: "Smart Kitchen Safety Dashboard",
@@ -14,7 +15,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <PageTransition>
+          {children}
+        </PageTransition>
+      </body>
     </html>
   );
 }
